@@ -196,12 +196,17 @@ Legend: `[ ]` todo · `[x]` done · `[~]` in progress/partial. Add sub-items as 
   - Design choices flagged in-file: `drink_categories` stored as `TEXT[]` labels and `event_format` as a `TEXT` label on `event_versions` (taxonomy tables drive the form options rather than being FK'd per-selection); `image_url` denormalised on the version with the full record in `files` (avoids a second circular FK).
 
 ### Phase 3 — Core flow (CURRENT)
-- [ ] Submission form (all fields + taxonomy selects + honeypot)
+Split into two rounds: **3a = form + image upload** (below, first two items + notes); **3b = payment + transactional persist** (remaining items). Do not build payment code in 3a.
+- [ ] Submission form (all fields + taxonomy selects + honeypot + rate limiting on the submission endpoint — §8 abuse controls)
+- [ ] Read-only taxonomy endpoint(s) to populate the selects from `drink_categories` / `event_formats` (not hardcoded — §7)
 - [ ] Image upload: server-side → public bucket pattern (SPEC §A5); validate type/size BEFORE payment
 - [ ] Stripe PaymentIntent manual-capture: authorise on submit; store intent id + `capture_before`
 - [ ] Webhook endpoint (verified with `STRIPE_WEBHOOK_SECRET`)
 - [ ] Persist submission (`events` + `event_versions` + `payments` + `files`) transactionally; cancel intent if save fails
 - [ ] Local proof: submit with 4242… → uncaptured authorisation visible in Stripe test dashboard
+
+  Discovered sub-tasks / notes:
+  - **Persistence timing:** the full write (`events` + `event_versions` + `files`) is transactional *with* the PaymentIntent and the intent is cancelled on save failure (§6). So round 3a must NOT fully persist a submission — either hold the validated form data + uploaded image URL, or write an explicit `draft` (§6 "abandoned checkout → nothing persisted, or an expiring draft"); record which was chosen. `payments` rows are written in 3b only.
 
 ### Phase 4 — Admin + safety net
 - [ ] Admin login (SPEC §A6 pattern) + `getServerSideProps` guard
