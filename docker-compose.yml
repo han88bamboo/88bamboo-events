@@ -4,7 +4,7 @@
 #   events-web Next.js dev server (hot reload), served under basePath /a/events
 #
 # All host ports bind to 127.0.0.1 only. Bring up with:  docker compose up --build
-# Browse:  http://localhost:8080/a/events      API:  http://localhost:5000/health
+# Browse:  http://localhost:8080/a/events      API:  http://localhost:5001/health
 # Re-seed the DB from scratch:  docker compose down -v && docker compose up --build
 
 services:
