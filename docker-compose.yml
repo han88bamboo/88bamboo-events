@@ -13,7 +13,7 @@ services:
     env_file:
       - ./database/.env
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:5433:5433"
     volumes:
       - pgdata:/var/lib/postgresql/data
       # Auto-runs every *.sql here ONCE on first boot (empty volume), in
@@ -32,7 +32,7 @@ services:
     env_file:
       - ./backend/.env
     ports:
-      - "127.0.0.1:5000:5000"
+      - "127.0.0.1:5001:5000"
     networks:
       default:
         # `backend` alias so SSR's API_INTERNAL_URL=http://backend:5000 resolves
@@ -55,7 +55,7 @@ services:
       dockerfile: Dockerfile.frontend
       target: dev
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:5000
+      - NEXT_PUBLIC_API_URL=http://localhost:5001
       - API_INTERNAL_URL=http://backend:5000
       - NEXT_PUBLIC_BASE_URL=http://localhost:8080
       - SHOPIFY_PROXY_VERIFY=false
