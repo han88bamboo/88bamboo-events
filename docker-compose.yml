@@ -13,7 +13,9 @@ services:
     env_file:
       - ./database/.env
     ports:
-      - "127.0.0.1:5433:5433"
+      # Host 5433 -> container Postgres 5432 (plan §9: "db host 5433 ... container
+      # Postgres stays 5432"). The backend reaches it internally as db:5432.
+      - "127.0.0.1:5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       # Auto-runs every *.sql here ONCE on first boot (empty volume), in

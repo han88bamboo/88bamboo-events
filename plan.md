@@ -186,9 +186,14 @@ Legend: `[ ]` todo · `[x]` done · `[~]` in progress/partial. Add sub-items as 
   - APScheduler init is stubbed with a comment in `app.py` (wired in Phase 4).
 
 ### Phase 2 — Database
-- [ ] `database/schema.sql` per Section 7 (all 10 tables, conventions per SPEC §A3)
-- [ ] Seed: one pricing tier (USD 5), one admin user, taxonomy rows
-- [ ] Local auto-seed verified (tables exist in the compose db)
+- [x] `database/schema.sql` per Section 7 (all 10 tables, conventions per SPEC §A3). Circular events↔event_versions FK added via post-create `ALTER TABLE`. TIMESTAMPTZ throughout (global board); FKs `ON DELETE SET NULL`; CHECK constraints on the enumerated status/type columns; indexes for the pending queue + hourly capture_before scan + magic-link lookup.
+- [x] Seed: one pricing tier (USD 5 Standard), taxonomy (11 drink categories + 9 event formats) in `schema.sql`; admin user seeded from env by `database/seed-admin.sh` (never hardcoded — hash via `database/make-admin-hash.js`, vars in git-ignored `database/.env`; template `database/.env.example`; setup in `database/README.md`).
+- [x] Local auto-seed verified: applied the whole `database/` init set in a throwaway `postgres:15-alpine` with the same `/docker-entrypoint-initdb.d` hook — all 10 tables present, seed counts correct (1/11/9/1), circular FK present, insert→repoint roundtrip OK, and the env-driven admin seed works (and cleanly skips when `ADMIN_*` unset). Full `docker compose up` not re-run this session, but the init behaviour it relies on is proven identically.
+
+  Discovered sub-tasks / notes:
+  - **Fixed a compose port bug:** `db` published `127.0.0.1:5433:5433`, but the container Postgres listens on 5432, so host access on 5433 never worked. Corrected to `5433:5432` per §9 ("db host 5433 … container Postgres stays 5432"). Backend still reaches it internally as `db:5432`.
+  - Schema.sql re-declares the extensions (idempotent) so it also applies standalone to RDS in Phase 7.
+  - Design choices flagged in-file: `drink_categories` stored as `TEXT[]` labels and `event_format` as a `TEXT` label on `event_versions` (taxonomy tables drive the form options rather than being FK'd per-selection); `image_url` denormalised on the version with the full record in `files` (avoids a second circular FK).
 
 ### Phase 3 — Core flow (CURRENT)
 - [ ] Submission form (all fields + taxonomy selects + honeypot)

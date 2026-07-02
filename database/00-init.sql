@@ -6,7 +6,8 @@
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE EXTENSION IF NOT EXISTS unaccent;
 
--- NOTE: The full schema + seed (all 10 tables, pricing tier, admin user,
--- taxonomy) lands in Phase 2 as 01-schema.sql / 02-seed.sql in this directory.
--- They will be auto-applied by the same init hook on the next `down -v` + `up`.
--- See plan.md checklist Phase 2 and §7 for the table definitions.
+-- NOTE: The full schema + non-secret seed (all 10 tables, pricing tier,
+-- taxonomy) live in schema.sql; the admin user is seeded from env by
+-- seed-admin.sh. Init files run in filename order: 00-init.sql -> schema.sql ->
+-- seed-admin.sh. All auto-applied by this init hook on the next `down -v` + `up`.
+-- See plan.md §7 and database/README.md.
