@@ -152,12 +152,12 @@ Follow the SPEC §A3 SQL conventions (SERIAL PKs, FKs `ON DELETE SET NULL`, para
 | `STRIPE_WEBHOOK_SECRET` (api) | from `stripe listen` | prod webhook whsec_… | backend `.env` / ECS env |
 | `SHOPIFY_SHARED_SECRET` (web+api) | set (unused locally) | custom-app secret | backend env + Vercel |
 | `SHOPIFY_PROXY_VERIFY` (web+api) | `false` | `true` | backend env + Vercel |
-| `NEXT_PUBLIC_API_URL` (web) | http://localhost:5000 | https://events-api.88bamboo.co | `.env.local` + Vercel |
+| `NEXT_PUBLIC_API_URL` (web) | http://localhost:5001 | https://events-api.88bamboo.co | `.env.local` + Vercel |
 | `API_INTERNAL_URL` (web) | http://backend:5000 (compose) | empty | `.env.local` + Vercel |
 | `NEXT_PUBLIC_BASE_URL` (web) * derive canonical base from NEXT_PUBLIC_BASE_URL + basePath | http://localhost:8080 | https://www.88bamboo.co | `.env.local` + Vercel |
 | SES sender (api) | local mailer / MailHog | events@88bamboo.co | backend env |
 
-**Local stack:** `docker compose up --build` → `db` (Postgres 15, seeded from `database/*.sql`) + `events-api` + `events-web` (dev target, hot reload). Ports bound to 127.0.0.1; healthcheck-gated depends_on; re-seed with `down -v`. Local gotchas: no App Proxy locally (browse `http://localhost:8080/a/events`); Stripe webhooks via `stripe listen --forward-to localhost:5000/<webhook path>`; never send real email locally.
+**Local stack:** `docker compose up --build` → `db` (Postgres 15, seeded from `database/*.sql`) + `events-api` + `events-web` (dev target, hot reload). Ports bound to 127.0.0.1; healthcheck-gated depends_on; re-seed with `down -v`. Local gotchas: no App Proxy locally (browse `http://localhost:8080/a/events`); Stripe webhooks via `stripe listen --forward-to localhost:5001/<webhook path>`; never send real email locally. **Local host ports (per docker-compose.yml): events-web 8080, events-api 5001→container 5000, db host 5433 (container Postgres stays 5432; the backend reaches it internally as `db:5432`).**
 
 ---
 
