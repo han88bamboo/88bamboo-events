@@ -1,0 +1,76 @@
+# docker-compose.yml — local 3-service stack (plan.md §9, PATTERN-SPEC §A1/§A3.6).
+#   db         Postgres 15, auto-seeded from database/*.sql on first boot
+#   events-api Flask API (gunicorn/gevent) — network alias `backend`
+#   events-web Next.js dev server (hot reload), served under basePath /a/events
+#
+# All host ports bind to 127.0.0.1 only. Bring up with:  docker compose up --build
+# Browse:  http://localhost:8080/a/events      API:  http://localhost:5000/health
+# Re-seed the DB from scratch:  docker compose down -v && docker compose up --build
+
+services:
+  db:
+    image: postgres:15-alpine
+    env_file:
+      - ./database/.env
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Auto-runs every *.sql here ONCE on first boot (empty volume), in
+      # filename order. Full schema/seed arrive as 01-/02- in Phase 2.
+      - ./database:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  events-api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.backend
+    env_file:
+      - ./backend/.env
+    ports:
+      - "127.0.0.1:5000:5000"
+    networks:
+      default:
+        # `backend` alias so SSR's API_INTERNAL_URL=http://backend:5000 resolves
+        # (matches the api.js fallback and plan.md §9's stated value).
+        aliases:
+          - backend
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  events-web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
+      target: dev
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:5000
+      - API_INTERNAL_URL=http://backend:5000
+      - NEXT_PUBLIC_BASE_URL=http://localhost:8080
+      - SHOPIFY_PROXY_VERIFY=false
+    ports:
+      - "127.0.0.1:8080:3000"
+    volumes:
+      # Bind-mount source for hot reload; keep the image's node_modules.
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      events-api:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+
+networks:
+  default:

@@ -1,0 +1,21 @@
+# --- Secrets / env (never commit real values) ---
+backend/.env
+database/.env
+frontend/.env.local
+frontend/.env
+frontend/.env.production
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# --- Node / Next ---
+node_modules/
+frontend/.next/
+frontend/out/
+npm-debug.log*
+
+# --- Misc ---
+.DS_Store

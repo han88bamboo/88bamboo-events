@@ -1,0 +1,30 @@
+# events-api dependency baseline (PATTERN-SPEC §A8, "recommended baseline").
+# Deprecated/omitted per plan.md + SPEC annotations:
+#   - Flask-PyMongo / pymongo  (legacy Mongo — this app is PostgreSQL only)
+#   - redis, pycparser         (unused / transitive)
+#   - PyJWT[crypto], firebase-admin  (no mobile app, no push — §A4 annotation)
+#   - PyMuPDF, pandas, forex-python, feedparser, beautifulsoup4, chardet,
+#     fuzzywuzzy               (not needed for the events flow; PDF intake is Phase-2)
+# Integrations below (stripe/boto3/APScheduler) are seeded now to avoid churn in
+# Phases 3–4; they are imported lazily by their own blueprints, not at boot.
+
+# --- Web / server ---
+Flask==3.0.2
+Flask-Cors==4.0.0
+gunicorn[gevent]==21.2.0
+
+# --- PostgreSQL (gevent-cooperative) ---
+psycopg2-binary==2.9.11
+psycogreen==1.0.2
+
+# --- Config ---
+python-dotenv==1.0.0
+
+# --- Integrations (used from Phase 3+) ---
+stripe>=5.0.0
+boto3==1.34.145
+requests==2.31.0
+
+# --- Scheduled jobs (Phase 4) ---
+APScheduler==3.10.4
+pytz==2023.4

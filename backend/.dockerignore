@@ -1,0 +1,9 @@
+# Keep secrets and local cruft out of the image. Env is injected at runtime via
+# docker-compose env_file (plan.md §9), not baked in.
+.env
+.env.*
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+tests/

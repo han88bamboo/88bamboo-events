@@ -1,0 +1,18 @@
+/* ===== Tailwind (namespaced tw-, important) ===== */
+/* Directives included so tw-* utilities are emitted. Bootstrap + this sheet
+   provide the base layer; Tailwind is opt-in via tw- classes (PATTERN-SPEC
+   §B4.3.5). */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===== Base ===== */
+body {
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  background-color: #ffffff;
+}
+
+/* Brand palette reference (also in tailwind.config.mjs):
+   custom-green #0B4321 · custom-orange #DD9E54 · nav-color #FFFCF6 */
+
+/* Feature-specific styles are added per phase below this banner. */
