@@ -48,8 +48,11 @@
     if (!iso) return 'Date TBC';
     var d = new Date(iso);
     if (isNaN(d.getTime())) return 'Date TBC';
-    return d.toLocaleDateString(undefined, {
+    // Pin locale + UTC so the widget shows the event's entered date, matching the
+    // main site (publicFormat.js) rather than drifting by the viewer's timezone.
+    return d.toLocaleDateString('en-GB', {
       weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+      timeZone: 'UTC',
     });
   }
 
