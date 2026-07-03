@@ -3,6 +3,8 @@
 #   POST /admin/login     issue a signed admin session (mirrors §A6 login UX)
 #   GET  /admin/pending   the review queue: pending versions + payment + image + dup flag
 #   POST /admin/approve   capture the hold -> publish -> approval email   [GUARDED]
+#                         (edit-approval variant: repoint published_version_id +
+#                          keep the slug, no capture — plan §7)
 #   POST /admin/reject    cancel the hold  -> rejection email (reason)     [GUARDED]
 #
 # THE CARVE-OUT (plan §5.3): approve/reject move money and change live listings,
@@ -24,7 +26,12 @@ from psycopg2.extras import Json
 
 from app import db_manager
 from admin_auth import admin_required, issue_session_token
-from notifications import send_approved, send_rejected, send_repay_required
+from notifications import (
+    send_approved,
+    send_edit_approved,
+    send_rejected,
+    send_repay_required,
+)
 from payments import cancel_intent, capture_intent
 from slugs import generate_unique_slug
 
@@ -166,6 +173,7 @@ def _load_version_for_action(cursor, version_id):
             ev.country,
             e.submitter_email,
             e.published_version_id,
+            e.slug,
             p.id                 AS payment_id,
             p.payment_intent_id,
             p.amount,
@@ -226,10 +234,65 @@ def approve():
             jsonify({"code": 409, "error": f"Already {row['approval_status']}."}),
             409,
         )
-    if not row["payment_intent_id"]:
-        return jsonify({"code": 409, "error": "No payment is attached to this submission."}), 409
 
     event = _row_to_event(row)
+
+    # -----------------------------------------------------------------------
+    # EDIT-APPROVAL PATH (plan §7 / Phase-5 heads-up note). If the event is
+    # ALREADY published, this pending version is a POST-approval EDIT (created via
+    # magic-link editing). Approving it just REPOINTS published_version_id to the
+    # new version and KEEPS the existing slug — no Stripe capture, because edits
+    # are free at MVP and carry no payment. This is a distinct code path from the
+    # first-approval capture-and-mint-slug flow below.
+    # -----------------------------------------------------------------------
+    if row["published_version_id"] is not None:
+        try:
+            with db_manager.get_cursor() as cursor:
+                cursor.execute(
+                    "UPDATE events SET published_version_id = %s WHERE id = %s",
+                    (version_id, row["event_id"]),
+                )
+                cursor.execute(
+                    "UPDATE event_versions "
+                    "SET approval_status = 'approved', reviewed_at = now() "
+                    "WHERE id = %s",
+                    (version_id,),
+                )
+                _log_action(
+                    cursor,
+                    row["event_id"],
+                    "approve_edit",
+                    {
+                        "version_id": version_id,
+                        "slug": row["slug"],
+                        "previous_published_version_id": row["published_version_id"],
+                    },
+                )
+        except psycopg2.Error:
+            return jsonify({"code": 500, "error": "Could not publish the edit. Please retry."}), 500
+
+        public_url = f"{_PUBLIC_EVENT_BASE_URL}/{row['slug']}" if row["slug"] else None
+        send_edit_approved(row["submitter_email"], event, public_url)
+        return (
+            jsonify(
+                {
+                    "code": 200,
+                    "data": {
+                        "event_id": row["event_id"],
+                        "version_id": version_id,
+                        "status": "published",
+                        "slug": row["slug"],
+                        "public_url": public_url,
+                        "edit": True,
+                    },
+                }
+            ),
+            200,
+        )
+
+    # First-approval path: a payment (the authorised hold) must be present.
+    if not row["payment_intent_id"]:
+        return jsonify({"code": 409, "error": "No payment is attached to this submission."}), 409
 
     # Capture the hold — UNLESS it was already captured in a reconciliation window
     # (webhook set payments.status='captured' after a prior partial approve). A

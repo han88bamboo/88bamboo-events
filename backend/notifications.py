@@ -14,7 +14,11 @@
 #   - submitter "auto-released" (review window lapsed; hold freed, resubmit)
 #   - admin     "pending digest" (once-a-day summary of the review queue)
 #   - admin     "expiry alert"   (send-once 48h / 24h before an authorisation lapses)
-# The magic-link / edit emails are wired in Phase 5.
+# Phase-5 emails (magic-link editing — plan §7/§8):
+#   - submitter "magic link"     (one-time 30-min edit link, URL token)
+#   - submitter "edit received"  (changes under review; edits are free)
+#   - admin     "edit awaiting"  (an edit is queued for review)
+#   - submitter "edit approved"  (the update is live; slug unchanged)
 
 import logging
 
@@ -205,6 +209,87 @@ def send_expiry_alert(recipient, event, capture_before, threshold_label):
         f"When:       {event.get('start_datetime')} — {event.get('end_datetime')}\n"
         f"Capture by: {deadline}\n\n"
         f"Open the admin dashboard to action it.\n"
+        f"— 88 Bamboo Events"
+    )
+    return send_email(subject, recipient, body)
+
+
+def send_magic_link(recipient, slug, edit_url):
+    """Submitter's edit magic-link email (plan §7/§8). Carries the one-time,
+    30-minute URL token as a plain link — no cookie, no password. The token is in
+    the URL because editing may run through the App Proxy (which strips cookies)."""
+    subject = "Your edit link for your 88 Bamboo event listing"
+    body = (
+        f"Hi,\n\n"
+        f"You (or someone using your email) asked to edit your event listing "
+        f"'{slug}'. Use the link below to make changes — it expires in 30 "
+        f"minutes and is for you alone:\n\n"
+        f"{edit_url}\n\n"
+        f"Any changes you submit are reviewed before they go live. If you didn't "
+        f"request this, you can safely ignore this email — nothing changes.\n"
+        f"— 88 Bamboo Events"
+    )
+    return send_email(subject, recipient, body)
+
+
+def send_edit_received(recipient, event):
+    """Submitter confirmation that an edit was received and is under review (plan
+    §7/§8). Edits are free at MVP, so — unlike a first submission — there is no new
+    card hold to explain."""
+    subject = f"We received your edit — under review: {event.get('name')}"
+    body = (
+        f"Hi,\n\n"
+        f"Thanks — we received your changes and they're now under review. Your "
+        f"current listing stays as-is until we approve the update; there's no "
+        f"charge for edits.\n\n"
+        f"Event: {event.get('name')}\n"
+        f"When:  {event.get('start_datetime')} — {event.get('end_datetime')}\n"
+        f"Where: {event.get('city')}, {event.get('country')}\n\n"
+        f"We'll email you once it's live.\n"
+        f"— 88 Bamboo Events"
+    )
+    return send_email(subject, recipient, body)
+
+
+def send_edit_submission_admin(recipient, event, was_published):
+    """Owner alert that an EDIT is awaiting review (plan §7/§8). Notes whether it
+    edits an already-live listing (approving repoints the published version, keeps
+    the slug) or amends a still-pending submission."""
+    kind = (
+        "an edit to an already-LIVE listing"
+        if was_published
+        else "an amendment to a still-pending submission"
+    )
+    subject = f"Edit awaiting review: {event.get('name')}"
+    body = (
+        f"A submitter has proposed {kind}.\n\n"
+        f"Event:      {event.get('name')}\n"
+        f"Submitter:  {event.get('submitter_email')}\n"
+        f"When:       {event.get('start_datetime')} — {event.get('end_datetime')}\n"
+        f"Where:      {event.get('city')}, {event.get('country')}\n"
+        f"Format:     {event.get('event_format')}\n"
+        f"Categories: {', '.join(event.get('drink_categories') or [])}\n\n"
+        f"Open the admin dashboard to review the new version. Edits are free — no "
+        f"payment is attached.\n"
+        f"— 88 Bamboo Events"
+    )
+    return send_email(subject, recipient, body)
+
+
+def send_edit_approved(recipient, event, public_url=None):
+    """Submitter email when an EDIT is approved and is now the live version (plan
+    §7/§8). The slug (and URL) is unchanged — only the content updated."""
+    url_line = f"\nYour listing: {public_url}\n" if public_url else ""
+    subject = f"Your listing update is live: {event.get('name')}"
+    body = (
+        f"Hi,\n\n"
+        f"Your changes have been approved and are now live on the 88 Bamboo "
+        f"events board — same link as before, updated details.\n"
+        f"{url_line}\n"
+        f"Event: {event.get('name')}\n"
+        f"When:  {event.get('start_datetime')} — {event.get('end_datetime')}\n"
+        f"Where: {event.get('city')}, {event.get('country')}\n\n"
+        f"Thanks for keeping your listing up to date.\n"
         f"— 88 Bamboo Events"
     )
     return send_email(subject, recipient, body)

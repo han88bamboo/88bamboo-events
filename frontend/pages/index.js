@@ -1,53 +1,65 @@
-// pages/index.js — the /a/events landing page (scaffold placeholder).
-// Thin page: it verifies the App Proxy signature (no-op locally), fetches the
-// backend health over the SSR/internal URL to prove the api-config split works,
-// then renders a view inside the Main layout via WithLayout.
+// pages/index.js — the /a/events listing page (plan §8). Thin page (SPEC §B3.2.5):
+// verify the App Proxy signature (no-op locally), fetch the first page of events
+// + taxonomy + country options SSR (so the grid is crawlable), then render the
+// EventListing view inside the Main layout.
 import Head from 'next/head';
 
 import WithLayout from '@/components/WithLayout';
 import { Main } from '@/components/layouts';
+import EventListing from '@/components/views/publicPages/EventListing';
 import { eventsService } from '@/core/services/events';
+import { submissionsService } from '@/core/services/submissions';
+import { listingCanonicalUrl } from '@/core/utils/seo';
 import { verifyProxyRequest } from '@/core/utils/shopifyProxy';
 
-function Landing({ apiHealth }) {
-  return (
-    <>
-      <Head>
-        <title>88 Bamboo Events</title>
-        <meta name="description" content="Drinks & hospitality events — 88 Bamboo." />
-      </Head>
-      <main className="container py-5">
-        <h1 className="tw-text-custom-green" style={{ fontFamily: 'Sora, sans-serif' }}>
-          88 Bamboo Events
-        </h1>
-        <p className="text-muted">
-          Scaffold is live. Public listings, submission flow and admin dashboard
-          arrive in later phases.
-        </p>
-        <p>
-          Backend health (via SSR):{' '}
-          <code>{apiHealth ? JSON.stringify(apiHealth) : 'unreachable'}</code>
-        </p>
-      </main>
-    </>
-  );
-}
+// The listing filters we honour from the initial URL query (deep-linkable).
+const QUERY_KEYS = [
+  'q', 'category', 'format', 'country', 'city',
+  'date_from', 'date_to', 'when', 'preferred_country',
+];
 
 export async function getServerSideProps(ctx) {
   // App Proxy guard — pass-through locally (SHOPIFY_PROXY_VERIFY=false).
   const { valid } = verifyProxyRequest(ctx);
   if (!valid) return { notFound: true };
 
-  let apiHealth = null;
+  // Seed the filters from the URL so a shared/deep link renders server-side.
+  const initialFilters = {};
+  QUERY_KEYS.forEach((k) => {
+    if (ctx.query[k]) initialFilters[k] = String(ctx.query[k]);
+  });
+  if (!initialFilters.when) initialFilters.when = 'upcoming';
+
+  let initialEvents = [];
+  let taxonomy = { drink_categories: [], event_formats: [] };
+  let countries = [];
   try {
-    apiHealth = await eventsService.health();
+    [initialEvents, taxonomy, countries] = await Promise.all([
+      eventsService.getListing(initialFilters),
+      submissionsService.getTaxonomy(),
+      eventsService.getCountries(),
+    ]);
   } catch {
-    apiHealth = null;
+    // Degrade gracefully: render an empty board if the API is unreachable.
   }
 
-  return { props: { apiHealth } };
+  return { props: { initialEvents, taxonomy, countries, initialFilters } };
 }
 
-export default function IndexPage(props) {
-  return <WithLayout layout={Main} component={Landing} {...props} />;
+function ListingPage(props) {
+  return (
+    <>
+      <Head>
+        <title>Drinks &amp; hospitality events — 88 Bamboo</title>
+        <meta
+          name="description"
+          content="Discover upcoming drinks and hospitality events worldwide — tastings, masterclasses, bar takeovers and more on the 88 Bamboo events board."
+        />
+        <link rel="canonical" href={listingCanonicalUrl()} />
+      </Head>
+      <WithLayout layout={Main} component={EventListing} {...props} />
+    </>
+  );
 }
+
+export default ListingPage;
