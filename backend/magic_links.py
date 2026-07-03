@@ -92,3 +92,46 @@ def mark_used(cursor, magic_link_id):
         "UPDATE magic_links SET used_at = now() WHERE id = %s AND used_at IS NULL",
         (magic_link_id,),
     )
+
+
+# ---------------------------------------------------------------------------
+# Account-scoped links (customer "manage all my listings" dashboard). These are
+# scoped to an EMAIL rather than a single event: magic_links.email is set and
+# event_id is NULL. The token proves ownership of the email, so it authorises
+# every listing that email submitted (ownership re-checked per action server-side).
+# Same hashed-token / expiry / anti-enumeration shape as the per-event links.
+# ---------------------------------------------------------------------------
+def create_account_link(cursor, email, ttl_minutes=DEFAULT_TTL_MINUTES):
+    """Mint an account-wide dashboard link for an email. Stores the token HASH +
+    the email (event_id NULL) and returns the RAW token for emailing."""
+    raw_token = generate_token()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=ttl_minutes)
+    cursor.execute(
+        "INSERT INTO magic_links (event_id, email, token_hash, expires_at) "
+        "VALUES (NULL, %s, %s, %s) RETURNING id",
+        (email.strip().lower(), hash_token(raw_token), expires_at),
+    )
+    link_id = cursor.fetchone()["id"]
+    return raw_token, link_id
+
+
+def resolve_account_token(cursor, raw_token):
+    """Look up a live (not-expired) ACCOUNT link by a presented raw token. Returns
+    {magic_link_id, email, expires_at, used_at} or None. Only matches account
+    links (email set, event_id NULL) so a per-event token can't be replayed here."""
+    if not raw_token:
+        return None
+    cursor.execute(
+        """
+        SELECT id AS magic_link_id, email, expires_at, used_at
+        FROM magic_links
+        WHERE token_hash = %s
+          AND email IS NOT NULL
+          AND event_id IS NULL
+          AND expires_at > now()
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (hash_token(raw_token),),
+    )
+    return cursor.fetchone()

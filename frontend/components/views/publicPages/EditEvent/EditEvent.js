@@ -1,15 +1,18 @@
-// EditEvent — the magic-link edit form (plan §7). Prefilled from the token's
-// current version. Submitting creates a NEW pending_review version (the image is
-// carried forward — image editing is out of MVP scope). Edits are free; no
-// payment step. Fields mirror SubmitEvent, minus the image + honeypot.
+// EditEvent — the reusable edit form (plan §7). Prefilled from the current
+// version; submitting creates a NEW pending_review version (image carried
+// forward — image editing is out of MVP scope; edits are free). Fields mirror
+// SubmitEvent, minus the image + honeypot.
+//
+// Transport-agnostic: the caller passes `onSubmit(eventFields)` returning the
+// apiClient-shaped `{ data, ok }`, so the same form serves both the per-event
+// magic link (/edit) and the account dashboard (/my-events/<id>). `onCancel` is
+// optional (the account flow shows a "Cancel" back to the event view).
 import { useState } from 'react';
-
-import { editsService } from '@/core/services/edits';
 
 // datetime-local wants 'YYYY-MM-DDTHH:MM'; the API returns full ISO strings.
 const toLocalInput = (iso) => (iso ? String(iso).slice(0, 16) : '');
 
-function EditEvent({ token, context, taxonomy }) {
+function EditEvent({ context, taxonomy, onSubmit, onCancel }) {
   const drinkCategories = taxonomy?.drink_categories || [];
   const eventFormats = taxonomy?.event_formats || [];
   const src = context?.event || {};
@@ -42,12 +45,12 @@ function EditEvent({ token, context, taxonomy }) {
       prev.includes(label) ? prev.filter((c) => c !== label) : [...prev, label],
     );
 
-  const onSubmit = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setErrors([]);
     setSubmitting(true);
     try {
-      const { data, ok } = await editsService.submitEdit(token, {
+      const { data, ok } = await onSubmit({
         ...fields,
         drink_categories: selectedCategories,
       });
@@ -98,7 +101,7 @@ function EditEvent({ token, context, taxonomy }) {
         </div>
       )}
 
-      <form onSubmit={onSubmit} noValidate>
+      <form onSubmit={handleSubmit} noValidate>
         <div className="mb-3">
           <label className="form-label" htmlFor="name">Event name *</label>
           <input id="name" className="form-control" value={fields.name} onChange={setField('name')} maxLength={500} required />
@@ -187,9 +190,16 @@ function EditEvent({ token, context, taxonomy }) {
           <input id="submission_type" className="form-control" value={fields.submission_type} onChange={setField('submission_type')} maxLength={255} placeholder="e.g. bar, brand, agency" />
         </div>
 
-        <button type="submit" className="btn btn-success" disabled={submitting}>
-          {submitting ? 'Saving…' : 'Submit changes for review'}
-        </button>
+        <div className="d-flex gap-2">
+          <button type="submit" className="btn btn-success" disabled={submitting}>
+            {submitting ? 'Saving…' : 'Submit changes for review'}
+          </button>
+          {onCancel && (
+            <button type="button" className="btn btn-outline-secondary" onClick={onCancel} disabled={submitting}>
+              Cancel
+            </button>
+          )}
+        </div>
       </form>
     </main>
   );

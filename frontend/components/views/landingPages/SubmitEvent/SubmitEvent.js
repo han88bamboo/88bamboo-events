@@ -32,12 +32,36 @@ const EMPTY = {
   submission_type: '',
 };
 
-function SubmitEvent({ taxonomy }) {
+// datetime-local wants 'YYYY-MM-DDTHH:MM'; the re-submit prefill carries ISO.
+const toLocalInput = (iso) => (iso ? String(iso).slice(0, 16) : '');
+
+// Build the initial form state, seeding from a re-submit prefill when present.
+function initialFields(prefill) {
+  if (!prefill) return EMPTY;
+  return {
+    ...EMPTY,
+    name: prefill.name || '',
+    submitter_email: prefill.submitter_email || '',
+    contact_email: prefill.contact_email || '',
+    start_datetime: toLocalInput(prefill.start_datetime),
+    end_datetime: toLocalInput(prefill.end_datetime),
+    venue_name: prefill.venue_name || '',
+    venue_address: prefill.venue_address || '',
+    country: prefill.country || '',
+    city: prefill.city || '',
+    description: prefill.description || '',
+    link: prefill.link || '',
+    event_format: prefill.event_format || '',
+    submission_type: prefill.submission_type || '',
+  };
+}
+
+function SubmitEvent({ taxonomy, prefill }) {
   const drinkCategories = taxonomy?.drink_categories || [];
   const eventFormats = taxonomy?.event_formats || [];
 
-  const [fields, setFields] = useState(EMPTY);
-  const [selectedCategories, setSelectedCategories] = useState([]);
+  const [fields, setFields] = useState(() => initialFields(prefill));
+  const [selectedCategories, setSelectedCategories] = useState(prefill?.drink_categories || []);
   const [imageFile, setImageFile] = useState(null);
   const [honeypot, setHoneypot] = useState(''); // must stay empty for real users
   const [submitting, setSubmitting] = useState(false);
@@ -187,6 +211,13 @@ function SubmitEvent({ taxonomy }) {
         Submit your drinks or hospitality event. Listings go live after review;
         the USD 5 fee is only charged if your listing is approved.
       </p>
+
+      {prefill && (
+        <div className="alert alert-info" role="status">
+          We&apos;ve pre-filled the details from your previous listing. Re-upload the
+          event image and submit to list it again — a fresh listing fee applies.
+        </div>
+      )}
 
       {errors.length > 0 && (
         <div className="alert alert-danger" role="alert">

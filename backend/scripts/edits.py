@@ -29,6 +29,7 @@ import psycopg2
 from flask import Blueprint, jsonify, request
 
 from app import db_manager
+from event_versioning import create_edit_version, editable_version
 from magic_links import create_magic_link, mark_used, resolve_token
 from notifications import (
     send_edit_received,
@@ -64,21 +65,8 @@ def _load_active_taxonomy():
     return categories, formats
 
 
-def _editable_version(cursor, event_id, published_version_id):
-    """The version whose content prefills the edit form: the live one if the event
-    is published, otherwise the latest submitted version."""
-    if published_version_id is not None:
-        cursor.execute(
-            "SELECT * FROM event_versions WHERE id = %s",
-            (published_version_id,),
-        )
-    else:
-        cursor.execute(
-            "SELECT * FROM event_versions WHERE event_id = %s "
-            "ORDER BY version_number DESC, id DESC LIMIT 1",
-            (event_id,),
-        )
-    return cursor.fetchone()
+# _editable_version + the edit-version creation now live in event_versioning.py
+# (shared with the account dashboard flow); this module imports them.
 
 
 # ---------------------------------------------------------------------------
@@ -141,7 +129,7 @@ def context():
             link = resolve_token(cursor, token)
             if not link:
                 return jsonify({"code": 404, "error": "This edit link is invalid or has expired."}), 404
-            version = _editable_version(cursor, link["event_id"], link["published_version_id"])
+            version = editable_version(cursor, link["event_id"], link["published_version_id"])
     except psycopg2.Error:
         return jsonify({"code": 500, "error": "Database error occurred"}), 500
 
@@ -210,70 +198,13 @@ def submit_edit():
                 return jsonify({"code": 404, "error": "This edit link is invalid or has expired."}), 404
 
             event_id = link["event_id"]
-            is_published = link["published_version_id"] is not None
 
-            # The version we're editing FROM — carries the image forward (image
-            # editing is out of MVP scope; the new version keeps the prior image).
-            source = _editable_version(cursor, event_id, link["published_version_id"])
-            image_url = source["image_url"] if source else None
-
-            # New version number = current max + 1 (plan §7 full history).
-            cursor.execute(
-                "SELECT COALESCE(MAX(version_number), 0) + 1 AS n "
-                "FROM event_versions WHERE event_id = %s",
-                (event_id,),
+            # Create the new pending version (pre-/post-approval handled inside the
+            # shared helper). Returns the new version id + whether it was an edit
+            # of an already-published listing.
+            new_version_id, is_published = create_edit_version(
+                cursor, event_id, link["published_version_id"], cleaned
             )
-            next_version_number = cursor.fetchone()["n"]
-
-            cursor.execute(
-                "INSERT INTO event_versions ("
-                "  event_id, version_number, approval_status, name, start_datetime,"
-                "  end_datetime, venue_name, venue_address, country, city,"
-                "  description, link, contact_email, image_url, submission_type,"
-                "  drink_categories, event_format"
-                ") VALUES (%s, %s, 'pending_review', %s, %s, %s, %s, %s, %s, %s,"
-                "          %s, %s, %s, %s, %s, %s, %s) RETURNING id",
-                (
-                    event_id,
-                    next_version_number,
-                    cleaned["name"],
-                    cleaned["start_datetime"],
-                    cleaned["end_datetime"],
-                    cleaned["venue_name"],
-                    cleaned["venue_address"],
-                    cleaned["country"],
-                    cleaned["city"],
-                    cleaned["description"],
-                    cleaned["link"],
-                    cleaned["contact_email"],
-                    image_url,
-                    cleaned["submission_type"],
-                    cleaned["drink_categories"],
-                    cleaned["event_format"],
-                ),
-            )
-            new_version_id = cursor.fetchone()["id"]
-
-            if not is_published:
-                # PRE-approval edit: move the still-authorised hold onto the new
-                # version and supersede the old pending version(s), so the queue
-                # carries exactly one pending version with the live hold. The hold
-                # is NOT cancelled (we're moving it, not releasing it).
-                cursor.execute(
-                    "UPDATE payments SET event_version_id = %s "
-                    "WHERE event_version_id IN ("
-                    "  SELECT id FROM event_versions "
-                    "  WHERE event_id = %s AND id <> %s AND approval_status = 'pending_review'"
-                    ") AND status = 'authorised'",
-                    (new_version_id, event_id, new_version_id),
-                )
-                cursor.execute(
-                    "UPDATE event_versions "
-                    "SET approval_status = 'rejected', "
-                    "    rejection_reason = 'Superseded by a newer edit' "
-                    "WHERE event_id = %s AND id <> %s AND approval_status = 'pending_review'",
-                    (event_id, new_version_id),
-                )
 
             mark_used(cursor, link["magic_link_id"])
 

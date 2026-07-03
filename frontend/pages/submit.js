@@ -7,6 +7,7 @@ import Head from 'next/head';
 import WithLayout from '@/components/WithLayout';
 import { Main } from '@/components/layouts';
 import SubmitEvent from '@/components/views/landingPages/SubmitEvent';
+import { accountService } from '@/core/services/account';
 import { submissionsService } from '@/core/services/submissions';
 import { verifyProxyRequest } from '@/core/utils/shopifyProxy';
 
@@ -22,7 +23,22 @@ export async function getServerSideProps(ctx) {
     // Leave the selects empty if the API is unreachable; the page still renders.
   }
 
-  return { props: { taxonomy } };
+  // Re-submit flow (plan §7): an archived/withdrawn listing links here with
+  // ?resubmit=<id>&token=<account token>. We fetch its fields (ownership checked
+  // server-side by the account token) to PRE-FILL a brand-new submission. The
+  // image + payment are fresh — only the text fields are carried over.
+  let prefill = null;
+  const { resubmit, token } = ctx.query;
+  if (resubmit && token) {
+    try {
+      const res = await accountService.getEvent(String(token), String(resubmit));
+      prefill = res.data?.data?.event || null;
+    } catch {
+      prefill = null;
+    }
+  }
+
+  return { props: { taxonomy, prefill } };
 }
 
 function SubmitPage(props) {

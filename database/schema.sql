@@ -86,8 +86,18 @@ CREATE TABLE events (
     created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
     published_version_id INTEGER,               -- FK -> event_versions(id) added below; NULL until first approval
     submitter_email      VARCHAR(255) NOT NULL,
-    current_status       VARCHAR(50) NOT NULL DEFAULT 'pending_review',  -- e.g. pending_review / published / unpublished / rejected / expired
-    slug                 VARCHAR(255) UNIQUE    -- canonical URL slug (plan §4); NULL until a slug is assigned
+    current_status       VARCHAR(50) NOT NULL DEFAULT 'pending_review',  -- e.g. pending_review / published / unpublished / rejected / expired / withdrawn
+    slug                 VARCHAR(255) UNIQUE,   -- canonical URL slug (plan §4); NULL until a slug is assigned
+    -- Self-serve account management (customer "my listings" dashboard).
+    -- archived: the customer took this off their active board — either withdrew a
+    --   pending submission or unpublished a live one (goes to an archive, not
+    --   deleted). Distinguishes a CUSTOMER unpublish (archived = TRUE) from an
+    --   ADMIN unpublish (archived stays FALSE), which gates self-serve re-publish.
+    archived             BOOLEAN NOT NULL DEFAULT FALSE,
+    -- republish_count: how many times the customer has re-published this listing
+    --   after unpublishing it. Self-serve re-publish is allowed only while this is
+    --   < 1 ("re-publish only once" — stops flip-flopping).
+    republish_count      INTEGER NOT NULL DEFAULT 0
 );
 
 -- event_versions — immutable content snapshots. A new row is created on every
@@ -142,7 +152,8 @@ CREATE TABLE payments (
 -- raw token (plan §7). 30-min expiry, single-use (tolerate ~3 uses in app logic).
 CREATE TABLE magic_links (
     id         SERIAL PRIMARY KEY,
-    event_id   INTEGER REFERENCES events(id) ON DELETE SET NULL,
+    event_id   INTEGER REFERENCES events(id) ON DELETE SET NULL,  -- set for a per-event edit link
+    email      VARCHAR(255),                                      -- set for an account-wide dashboard link (event_id NULL)
     token_hash VARCHAR(255) NOT NULL,
     expires_at TIMESTAMPTZ NOT NULL,
     used_at    TIMESTAMPTZ,

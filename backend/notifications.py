@@ -243,6 +243,26 @@ def send_magic_link(recipient, slug, edit_url):
     return send_email(subject, recipient, body)
 
 
+def send_account_link(recipient, dashboard_url):
+    """Account-dashboard magic-link email (customer "manage all my listings").
+    Carries a one-time URL token to a page listing every event this email
+    submitted — cookie-free (the App Proxy strips cookies), 24-hour expiry. The
+    token authorises managing any of that email's listings, so it's for the
+    recipient alone."""
+    subject = "Manage your 88 Bamboo event listings"
+    body = (
+        f"Hi,\n\n"
+        f"Here's your secure link to manage all the events you've submitted to "
+        f"88 Bamboo — view, edit, withdraw or unpublish them in one place. It "
+        f"expires in 24 hours and is for you alone:\n\n"
+        f"{dashboard_url}\n\n"
+        f"If you didn't request this, you can safely ignore this email — nothing "
+        f"changes.\n"
+        f"— 88 Bamboo Events"
+    )
+    return send_email(subject, recipient, body)
+
+
 def send_edit_received(recipient, event):
     """Submitter confirmation that an edit was received and is under review (plan
     §7/§8). Edits are free at MVP, so — unlike a first submission — there is no new

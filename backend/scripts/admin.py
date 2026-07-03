@@ -144,6 +144,7 @@ def pending():
                     LIMIT 1
                 ) p ON TRUE
                 WHERE ev.approval_status = 'pending_review'
+                  AND e.archived = FALSE
                 ORDER BY ev.created_at ASC
                 """
             )

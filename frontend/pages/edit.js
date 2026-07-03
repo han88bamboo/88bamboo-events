@@ -37,14 +37,22 @@ export async function getServerSideProps(ctx) {
   return { props: { token, context, taxonomy } };
 }
 
-export default function EditPage(props) {
+export default function EditPage({ token, context, taxonomy }) {
+  // The form is transport-agnostic; wire it to the per-event edit endpoint.
+  const onSubmit = (eventFields) => editsService.submitEdit(token, eventFields);
   return (
     <>
       <Head>
         <title>Edit your event — 88 Bamboo Events</title>
         <meta name="robots" content="noindex" />
       </Head>
-      <WithLayout layout={Main} component={EditEvent} {...props} />
+      <WithLayout
+        layout={Main}
+        component={EditEvent}
+        context={context}
+        taxonomy={taxonomy}
+        onSubmit={onSubmit}
+      />
     </>
   );
 }
