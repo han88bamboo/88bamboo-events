@@ -13,7 +13,9 @@
     "react-dom": "19.2.0",
     "bootstrap": "^5.3.8",
     "bootstrap-icons": "^1.13.1",
-    "react-toastify": "^11.0.5"
+    "react-toastify": "^11.0.5",
+    "@stripe/stripe-js": "^5.6.0",
+    "@stripe/react-stripe-js": "^3.1.0"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.27",

@@ -9,6 +9,7 @@
 import { useState } from 'react';
 
 import { submissionsService } from '@/core/services/submissions';
+import CheckoutStep from './CheckoutStep';
 
 // Mirror the server's image rules for fast client-side feedback (the server is
 // still authoritative — submission_validation.py).
@@ -41,7 +42,16 @@ function SubmitEvent({ taxonomy }) {
   const [honeypot, setHoneypot] = useState(''); // must stay empty for real users
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState([]);
-  const [result, setResult] = useState(null);
+  const [result, setResult] = useState(null); // 3a held payload (event + image)
+  const [confirmation, setConfirmation] = useState(null); // 3b pending_review result
+
+  const resetAll = () => {
+    setResult(null);
+    setConfirmation(null);
+    setFields(EMPTY);
+    setSelectedCategories([]);
+    setImageFile(null);
+  };
 
   const setField = (key) => (e) =>
     setFields((prev) => ({ ...prev, [key]: e.target.value }));
@@ -114,17 +124,37 @@ function SubmitEvent({ taxonomy }) {
     }
   };
 
-  if (result) {
+  // Final state: the card was authorised and the listing is pending review.
+  if (confirmation) {
     return (
       <main className="container py-5" style={{ maxWidth: 720 }}>
         <div className="alert alert-success" role="alert">
-          <h4 className="alert-heading">Details received</h4>
+          <h4 className="alert-heading">Submission received — under review</h4>
           <p className="mb-0">
-            Your listing details and image were validated and saved for checkout.
-            The payment step (a temporary card hold, not a charge) is added in the
-            next build round.
+            We placed a temporary authorisation (a hold, not a charge) on your
+            card and sent you a confirmation email. Listings are usually reviewed
+            within 3 business days. You are only charged if your event is approved.
           </p>
         </div>
+        {confirmation.payment?.capture_before && (
+          <p className="text-muted">
+            Authorisation reference: <code>{confirmation.payment.payment_intent_id}</code>
+          </p>
+        )}
+        <button type="button" className="btn btn-outline-secondary" onClick={resetAll}>
+          Submit another
+        </button>
+      </main>
+    );
+  }
+
+  // Intermediate state: details validated + image uploaded (3a), now take payment.
+  if (result) {
+    return (
+      <main className="container py-5" style={{ maxWidth: 720 }}>
+        <h1 className="tw-text-custom-green mb-3" style={{ fontFamily: 'Sora, sans-serif' }}>
+          Confirm &amp; pay
+        </h1>
         {result.image?.url && (
           // Plain <img> (not next/image): the local stub host is not in the
           // next.config remotePatterns allowlist, and this is just a preview.
@@ -132,25 +162,18 @@ function SubmitEvent({ taxonomy }) {
             src={result.image.url}
             alt="Uploaded event"
             className="img-fluid rounded mb-3"
-            style={{ maxHeight: 260 }}
+            style={{ maxHeight: 200 }}
           />
         )}
-        <h5>Validated submission</h5>
-        <pre className="bg-light p-3 rounded" style={{ whiteSpace: 'pre-wrap' }}>
-          {JSON.stringify(result.event, null, 2)}
-        </pre>
-        <button
-          type="button"
-          className="btn btn-outline-secondary"
-          onClick={() => {
-            setResult(null);
-            setFields(EMPTY);
-            setSelectedCategories([]);
-            setImageFile(null);
-          }}
-        >
-          Submit another
-        </button>
+        <h5 className="mb-1">{result.event?.name}</h5>
+        <p className="text-muted">
+          {result.event?.city}, {result.event?.country}
+        </p>
+        <CheckoutStep
+          held={result}
+          onPaid={(data) => setConfirmation(data)}
+          onBack={() => setResult(null)}
+        />
       </main>
     );
   }

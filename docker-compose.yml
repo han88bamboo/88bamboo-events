@@ -61,6 +61,10 @@ services:
       - API_INTERNAL_URL=http://backend:5000
       - NEXT_PUBLIC_BASE_URL=http://localhost:8080
       - SHOPIFY_PROXY_VERIFY=false
+      # Stripe publishable (TEST) key for Stripe Elements (plan §6). Read from
+      # the shell env so the pk_test_ key is not committed; empty => checkout
+      # disabled with a clear message.
+      - NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:-}
     ports:
       - "127.0.0.1:8080:3000"
     volumes:
