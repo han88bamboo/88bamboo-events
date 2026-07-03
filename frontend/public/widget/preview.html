@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<!--
+  preview.html — a local-only page for eyeballing the homepage widget exactly
+  as it would render on 88bamboo.co, without touching the Shopify theme.
+
+  This is a plain static file (not a Next.js route) served from public/widget/,
+  same as events-widget.js itself. It uses the "Local testing" snippet from
+  README.md — data-api/data-site point at the docker-compose ports. Swap them
+  for the production origins before pasting into Shopify (see README.md).
+
+  View at: http://localhost:8080/a/events/widget/preview.html
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Widget preview — 88 Bamboo Events</title>
+  <meta name="robots" content="noindex" />
+  <style>
+    body { font-family: system-ui, sans-serif; background: #FFFCF6; margin: 0; padding: 40px 20px; }
+    .shell { max-width: 1100px; margin: 0 auto; }
+    .shell > p.note {
+      background: #EAF2EC; border: 1px solid #cfe3d3; border-radius: 8px;
+      padding: 10px 14px; color: #0B4321; font-size: 0.9rem; margin-bottom: 28px;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <p class="note">
+      Preview only — mimics pasting the widget snippet into the Shopify theme.
+      Points at the local stack (localhost:5001 / localhost:8080). Only
+      <strong>published</strong> events appear.
+    </p>
+
+    <!-- ↓↓↓ this is the exact paste-in snippet (local-test variant) ↓↓↓ -->
+    <div id="bamboo-events-widget"
+         data-api="http://localhost:5001"
+         data-site="http://localhost:8080"
+         data-limit="6"
+         data-title="Upcoming events"></div>
+    <script src="/a/events/widget/events-widget.js" defer></script>
+    <!-- ↑↑↑ same two lines the owner pastes into Shopify, prod origins swapped in ↑↑↑ -->
+  </div>
+</body>
+</html>
