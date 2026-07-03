@@ -447,3 +447,419 @@ def _row_to_event(row):
         "city": row["city"],
         "country": row["country"],
     }
+
+
+# ===========================================================================
+# Phase 4B — live-listing management, version history, analytics, pricing CRUD.
+# All endpoints are @admin_required (backstage-only); UNPUBLISH is one of the
+# plan §5.3 carve-out four (it changes a live listing) so its server-side guard
+# is load-bearing, not just UX.
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# Live listings — every event that has been published at least once (has a
+# published_version_id), with its live version's detail. The UI groups these by
+# status: currently-live (published & upcoming), past (published & ended, shown
+# muted/badged — plan §8), and off-board (unpublished / auto-expired). version
+# count drives the "view history" affordance.
+# ---------------------------------------------------------------------------
+@blueprint.route("/live", methods=["GET"])
+@admin_required
+def live():
+    try:
+        with db_manager.get_cursor(commit=False) as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    e.id                 AS event_id,
+                    e.slug,
+                    e.current_status,
+                    e.submitter_email,
+                    e.created_at,
+                    e.published_version_id,
+                    pv.id                AS version_id,
+                    pv.version_number,
+                    pv.name,
+                    pv.start_datetime,
+                    pv.end_datetime,
+                    pv.venue_name,
+                    pv.venue_address,
+                    pv.city,
+                    pv.country,
+                    pv.image_url,
+                    pv.event_format,
+                    pv.drink_categories,
+                    (pv.end_datetime IS NOT NULL AND pv.end_datetime < now()) AS is_past,
+                    (SELECT count(*) FROM event_versions ev2 WHERE ev2.event_id = e.id)
+                                         AS version_count,
+                    pay.status           AS payment_status,
+                    pay.amount,
+                    pay.currency,
+                    pay.captured_at
+                FROM events e
+                JOIN event_versions pv ON pv.id = e.published_version_id
+                LEFT JOIN LATERAL (
+                    SELECT status, amount, currency, captured_at
+                    FROM payments
+                    WHERE event_version_id = pv.id
+                    ORDER BY id DESC
+                    LIMIT 1
+                ) pay ON TRUE
+                WHERE e.published_version_id IS NOT NULL
+                ORDER BY pv.start_datetime ASC NULLS LAST
+                """
+            )
+            rows = cursor.fetchall()
+    except psycopg2.Error:
+        return jsonify({"code": 500, "error": "Database error occurred"}), 500
+
+    return jsonify({"code": 200, "data": [dict(r) for r in rows]}), 200
+
+
+# ---------------------------------------------------------------------------
+# Unpublish — the plan §5.3 carve-out. Take a currently-live listing off the
+# board: events.current_status='unpublished' (it drops out of the public/live
+# views) and log the action. The published_version_id and full history are kept
+# so it can be re-approved/re-published later; no money moves here (the fee was
+# already captured at approval).
+# ---------------------------------------------------------------------------
+@blueprint.route("/unpublish", methods=["POST"])
+@admin_required
+def unpublish():
+    body = request.get_json(silent=True) or {}
+    event_id = body.get("event_id")
+    reason = (body.get("reason") or "").strip()
+    if not event_id:
+        return jsonify({"code": 400, "error": "event_id is required."}), 400
+
+    try:
+        with db_manager.get_cursor() as cursor:
+            cursor.execute(
+                "SELECT id, current_status, published_version_id "
+                "FROM events WHERE id = %s FOR UPDATE",
+                (event_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return jsonify({"code": 404, "error": "Listing not found."}), 404
+            # Only a currently-published listing can be unpublished.
+            if row["current_status"] != "published":
+                return (
+                    jsonify(
+                        {
+                            "code": 409,
+                            "error": f"Listing is not live (status: {row['current_status']}).",
+                        }
+                    ),
+                    409,
+                )
+
+            cursor.execute(
+                "UPDATE events SET current_status = 'unpublished' WHERE id = %s",
+                (event_id,),
+            )
+            _log_action(
+                cursor,
+                event_id,
+                "unpublish",
+                {
+                    "published_version_id": row["published_version_id"],
+                    "reason": reason or None,
+                },
+            )
+    except psycopg2.Error:
+        return jsonify({"code": 500, "error": "Could not unpublish. Please retry."}), 500
+
+    return (
+        jsonify(
+            {
+                "code": 200,
+                "data": {"event_id": event_id, "status": "unpublished"},
+            }
+        ),
+        200,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Version history (DISPLAY-ONLY in 4B — plan note). The full version chain for one
+# event, oldest first, marking which row is the currently-published one. This
+# renders the §7 versioning story: pre-approval edits are additional pending
+# versions; a post-approval edit is a new pending version that, once approved,
+# repoints published_version_id. (The endpoint that CREATES post-approval edit
+# versions is Phase 5 magic-link editing — there is no edit endpoint yet.)
+# ---------------------------------------------------------------------------
+@blueprint.route("/versions", methods=["GET"])
+@admin_required
+def versions():
+    event_id = request.args.get("event_id")
+    if not event_id:
+        return jsonify({"code": 400, "error": "event_id is required."}), 400
+
+    try:
+        with db_manager.get_cursor(commit=False) as cursor:
+            cursor.execute(
+                "SELECT id, published_version_id, current_status, slug, submitter_email "
+                "FROM events WHERE id = %s",
+                (event_id,),
+            )
+            event = cursor.fetchone()
+            if not event:
+                return jsonify({"code": 404, "error": "Listing not found."}), 404
+
+            cursor.execute(
+                """
+                SELECT
+                    ev.id                AS version_id,
+                    ev.version_number,
+                    ev.approval_status,
+                    ev.name,
+                    ev.start_datetime,
+                    ev.end_datetime,
+                    ev.city,
+                    ev.country,
+                    ev.created_at,
+                    ev.reviewed_at,
+                    ev.rejection_reason,
+                    (ev.id = %s)         AS is_published,
+                    pay.status           AS payment_status,
+                    pay.amount,
+                    pay.currency
+                FROM event_versions ev
+                LEFT JOIN LATERAL (
+                    SELECT status, amount, currency
+                    FROM payments
+                    WHERE event_version_id = ev.id
+                    ORDER BY id DESC
+                    LIMIT 1
+                ) pay ON TRUE
+                WHERE ev.event_id = %s
+                ORDER BY ev.version_number ASC, ev.id ASC
+                """,
+                (event["published_version_id"], event_id),
+            )
+            chain = [dict(r) for r in cursor.fetchall()]
+    except psycopg2.Error:
+        return jsonify({"code": 500, "error": "Database error occurred"}), 500
+
+    return (
+        jsonify(
+            {
+                "code": 200,
+                "data": {
+                    "event": dict(event),
+                    "versions": chain,
+                },
+            }
+        ),
+        200,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Analytics — status counts + a captured-revenue tally + an expiring-soon list
+# (authorised holds ordered by capture_before, driving the dashboard countdown;
+# the idx_payments_status_capture index supports the scan — plan §8).
+# ---------------------------------------------------------------------------
+@blueprint.route("/analytics", methods=["GET"])
+@admin_required
+def analytics():
+    try:
+        with db_manager.get_cursor(commit=False) as cursor:
+            cursor.execute(
+                "SELECT current_status, count(*) AS n FROM events GROUP BY current_status"
+            )
+            status_counts = {r["current_status"]: r["n"] for r in cursor.fetchall()}
+
+            cursor.execute(
+                """
+                SELECT
+                    count(*) FILTER (WHERE status = 'captured')            AS captured_count,
+                    COALESCE(sum(amount) FILTER (WHERE status = 'captured'), 0) AS captured_amount,
+                    count(*) FILTER (WHERE status = 'authorised')          AS held_count,
+                    count(*) FILTER (WHERE status = 'auto_released')       AS auto_released_count,
+                    count(*) FILTER (WHERE status = 'cancelled')           AS cancelled_count
+                FROM payments
+                """
+            )
+            payments_summary = dict(cursor.fetchone())
+
+            cursor.execute(
+                """
+                SELECT
+                    ev.event_id,
+                    ev.id                AS version_id,
+                    ev.name,
+                    ev.start_datetime,
+                    e.submitter_email,
+                    p.capture_before,
+                    p.amount,
+                    p.currency
+                FROM payments p
+                JOIN event_versions ev ON ev.id = p.event_version_id
+                JOIN events e ON e.id = ev.event_id
+                WHERE p.status = 'authorised'
+                  AND ev.approval_status = 'pending_review'
+                ORDER BY p.capture_before ASC NULLS LAST
+                """
+            )
+            expiring_soon = [dict(r) for r in cursor.fetchall()]
+    except psycopg2.Error:
+        return jsonify({"code": 500, "error": "Database error occurred"}), 500
+
+    return (
+        jsonify(
+            {
+                "code": 200,
+                "data": {
+                    "status_counts": status_counts,
+                    "payments": payments_summary,
+                    "expiring_soon": expiring_soon,
+                },
+            }
+        ),
+        200,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Pricing-tier CRUD (plan §6/§7). The submission flow reads the active tier as
+# `WHERE active = TRUE ORDER BY id LIMIT 1` (submissions.py) — so to keep new
+# submissions DETERMINISTIC we enforce a SINGLE-ACTIVE invariant here: writing a
+# tier as active deactivates every other tier in the same transaction, so at most
+# one tier is ever active and that ORDER BY ... LIMIT 1 always resolves to it.
+# ---------------------------------------------------------------------------
+def _deactivate_other_tiers(cursor, keep_id):
+    """Enforce the single-active invariant: clear `active` on every tier except
+    keep_id. Called whenever a tier is written active."""
+    cursor.execute(
+        "UPDATE pricing_tiers SET active = FALSE WHERE id <> %s AND active = TRUE",
+        (keep_id,),
+    )
+
+
+def _parse_tier_body(body):
+    """Validate/coerce a pricing-tier write body. Returns (values, error) where
+    values is (label, price Decimal, currency, featured_duration_days, active)."""
+    from decimal import Decimal, InvalidOperation
+
+    label = (body.get("label") or "").strip()
+    if not label:
+        return None, "A tier label is required."
+    try:
+        price = Decimal(str(body.get("price")))
+    except (InvalidOperation, TypeError, ValueError):
+        return None, "Price must be a number."
+    if price < 0:
+        return None, "Price cannot be negative."
+    currency = (body.get("currency") or "USD").strip().upper()
+    if len(currency) != 3:
+        return None, "Currency must be a 3-letter ISO code."
+    featured = body.get("featured_duration_days")
+    if featured in ("", None):
+        featured = None
+    else:
+        try:
+            featured = int(featured)
+        except (TypeError, ValueError):
+            return None, "Featured duration must be a whole number of days."
+    active = bool(body.get("active", True))
+    return (label, price, currency, featured, active), None
+
+
+@blueprint.route("/pricing-tiers", methods=["GET"])
+@admin_required
+def list_pricing_tiers():
+    try:
+        with db_manager.get_cursor(commit=False) as cursor:
+            cursor.execute(
+                "SELECT id, label, price, currency, featured_duration_days, active "
+                "FROM pricing_tiers ORDER BY id ASC"
+            )
+            rows = [dict(r) for r in cursor.fetchall()]
+    except psycopg2.Error:
+        return jsonify({"code": 500, "error": "Database error occurred"}), 500
+    return jsonify({"code": 200, "data": rows}), 200
+
+
+@blueprint.route("/pricing-tiers", methods=["POST"])
+@admin_required
+def create_pricing_tier():
+    values, error = _parse_tier_body(request.get_json(silent=True) or {})
+    if error:
+        return jsonify({"code": 400, "error": error}), 400
+    label, price, currency, featured, active = values
+    try:
+        with db_manager.get_cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO pricing_tiers (label, price, currency, featured_duration_days, active) "
+                "VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                (label, price, currency, featured, active),
+            )
+            tier_id = cursor.fetchone()["id"]
+            if active:
+                _deactivate_other_tiers(cursor, tier_id)
+            _log_action(cursor, None, "pricing_tier_create",
+                        {"tier_id": tier_id, "label": label, "active": active})
+    except psycopg2.Error:
+        return jsonify({"code": 500, "error": "Could not create the tier. Please retry."}), 500
+    return jsonify({"code": 200, "data": {"id": tier_id}}), 200
+
+
+@blueprint.route("/pricing-tiers/<int:tier_id>", methods=["PUT"])
+@admin_required
+def update_pricing_tier(tier_id):
+    values, error = _parse_tier_body(request.get_json(silent=True) or {})
+    if error:
+        return jsonify({"code": 400, "error": error}), 400
+    label, price, currency, featured, active = values
+    try:
+        with db_manager.get_cursor() as cursor:
+            cursor.execute("SELECT id FROM pricing_tiers WHERE id = %s", (tier_id,))
+            if not cursor.fetchone():
+                return jsonify({"code": 404, "error": "Tier not found."}), 404
+            cursor.execute(
+                "UPDATE pricing_tiers "
+                "SET label = %s, price = %s, currency = %s, "
+                "    featured_duration_days = %s, active = %s "
+                "WHERE id = %s",
+                (label, price, currency, featured, active, tier_id),
+            )
+            if active:
+                _deactivate_other_tiers(cursor, tier_id)
+            _log_action(cursor, None, "pricing_tier_update",
+                        {"tier_id": tier_id, "label": label, "active": active})
+    except psycopg2.Error:
+        return jsonify({"code": 500, "error": "Could not update the tier. Please retry."}), 500
+    return jsonify({"code": 200, "data": {"id": tier_id}}), 200
+
+
+@blueprint.route("/pricing-tiers/<int:tier_id>", methods=["DELETE"])
+@admin_required
+def delete_pricing_tier(tier_id):
+    try:
+        with db_manager.get_cursor() as cursor:
+            cursor.execute("SELECT active FROM pricing_tiers WHERE id = %s", (tier_id,))
+            row = cursor.fetchone()
+            if not row:
+                return jsonify({"code": 404, "error": "Tier not found."}), 404
+            # Refuse to delete the only remaining tier: submissions need one to
+            # price against (submissions.py returns 500 with no active tier).
+            cursor.execute("SELECT count(*) AS n FROM pricing_tiers")
+            if cursor.fetchone()["n"] <= 1:
+                return (
+                    jsonify(
+                        {
+                            "code": 409,
+                            "error": "Cannot delete the last pricing tier — "
+                            "create another first.",
+                        }
+                    ),
+                    409,
+                )
+            cursor.execute("DELETE FROM pricing_tiers WHERE id = %s", (tier_id,))
+            _log_action(cursor, None, "pricing_tier_delete", {"tier_id": tier_id})
+    except psycopg2.Error:
+        return jsonify({"code": 500, "error": "Could not delete the tier. Please retry."}), 500
+    return jsonify({"code": 200, "data": {"id": tier_id, "deleted": True}}), 200

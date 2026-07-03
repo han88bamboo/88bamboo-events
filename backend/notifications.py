@@ -10,6 +10,10 @@
 #   - submitter "approved"      (listing live; the held fee is now charged)
 #   - submitter "rejected"      (hold released, never charged; admin reason)
 #   - submitter "re-pay"        (approve-but-capture-failed; hold lapsed, resubmit)
+# Phase-4B emails (the safety-job mails — plan §6/§8):
+#   - submitter "auto-released" (review window lapsed; hold freed, resubmit)
+#   - admin     "pending digest" (once-a-day summary of the review queue)
+#   - admin     "expiry alert"   (send-once 48h / 24h before an authorisation lapses)
 # The magic-link / edit emails are wired in Phase 5.
 
 import logging
@@ -122,6 +126,85 @@ def send_rejected(recipient, event, reason=None):
         f"Event: {event.get('name')}\n"
         f"When:  {event.get('start_datetime')} — {event.get('end_datetime')}\n\n"
         f"You're welcome to address the above and resubmit.\n"
+        f"— 88 Bamboo Events"
+    )
+    return send_email(subject, recipient, body)
+
+
+def send_auto_released(recipient, event, amount, currency):
+    """Submitter email for the hourly auto-release safety job (plan §6). The
+    authorisation window lapsed before the listing could be reviewed, so the hold
+    was automatically released — the card was never charged. This is the promise
+    made in the under-review email ("If we can't review it within the
+    authorisation window, the hold is automatically released with no charge and
+    you're welcome to resubmit"), so the wording mirrors it."""
+    fee = _format_fee(amount, currency)
+    subject = f"Your event submission — hold released, please resubmit: {event.get('name')}"
+    body = (
+        f"Hi,\n\n"
+        f"Thanks again for your submission. Unfortunately we weren't able to "
+        f"review your listing within the card authorisation window, so — exactly "
+        f"as promised when you submitted — the temporary {fee} hold on your card "
+        f"has now been automatically released. You have NOT been charged.\n\n"
+        f"You're very welcome to resubmit and we'll take a fresh authorisation:\n"
+        f"Event: {event.get('name')}\n"
+        f"When:  {event.get('start_datetime')} — {event.get('end_datetime')}\n\n"
+        f"Sorry we couldn't get to it in time.\n"
+        f"— 88 Bamboo Events"
+    )
+    return send_email(subject, recipient, body)
+
+
+def send_pending_digest(recipient, pending_rows):
+    """Admin daily digest of the review queue (plan §6/§8). One line per pending
+    submission with its capture deadline so nothing is left to auto-release. Sent
+    once a day by the scheduler; a no-op benign body when the queue is empty (the
+    scheduler skips the send in that case, but the empty branch keeps it safe)."""
+    count = len(pending_rows)
+    if count == 0:
+        lines = "The review queue is empty — nothing awaiting review.\n"
+    else:
+        lines = ""
+        for row in pending_rows:
+            deadline = row.get("capture_before")
+            deadline = deadline.isoformat() if hasattr(deadline, "isoformat") else (deadline or "unknown")
+            lines += (
+                f"- {row.get('name')} "
+                f"(from {row.get('submitter_email')}) "
+                f"— capture by {deadline}\n"
+            )
+    subject = f"88 Bamboo Events — {count} listing(s) awaiting review"
+    body = (
+        f"Daily review digest.\n\n"
+        f"{count} submission(s) are awaiting your review:\n\n"
+        f"{lines}\n"
+        f"Open the admin dashboard to approve or reject. Holds are released "
+        f"automatically if not actioned before their capture deadline.\n"
+        f"— 88 Bamboo Events"
+    )
+    return send_email(subject, recipient, body)
+
+
+def send_expiry_alert(recipient, event, capture_before, threshold_label):
+    """Admin pre-expiry alert (plan §6/§8). Sent SEND-ONCE per threshold per
+    payment (the scheduler records a marker in admin_actions and skips rows
+    already alerted at this threshold, so an hourly scan can't re-send ~24 copies
+    across the window). `threshold_label` is a human string like '48 hours' /
+    '24 hours'."""
+    deadline = capture_before.isoformat() if hasattr(capture_before, "isoformat") else (capture_before or "unknown")
+    subject = (
+        f"Action needed within {threshold_label}: {event.get('name')}"
+    )
+    body = (
+        f"An authorised submission is approaching its capture deadline.\n\n"
+        f"If it is not approved or rejected within about {threshold_label}, the "
+        f"hold will be released automatically and the submitter asked to "
+        f"resubmit.\n\n"
+        f"Event:      {event.get('name')}\n"
+        f"Submitter:  {event.get('submitter_email')}\n"
+        f"When:       {event.get('start_datetime')} — {event.get('end_datetime')}\n"
+        f"Capture by: {deadline}\n\n"
+        f"Open the admin dashboard to action it.\n"
         f"— 88 Bamboo Events"
     )
     return send_email(subject, recipient, body)

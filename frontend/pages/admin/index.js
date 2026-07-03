@@ -9,7 +9,7 @@
 // server-side (plan §5.3 carve-out) — the cookie alone can't move money.
 import Head from 'next/head';
 
-import ReviewQueue from '@/components/views/admin/ReviewQueue';
+import AdminDashboard from '@/components/views/admin/AdminDashboard';
 import { hasAdminCookie } from '@/core/utils/adminCookie';
 
 export function getServerSideProps(ctx) {
@@ -23,10 +23,10 @@ function AdminDashboardPage() {
   return (
     <>
       <Head>
-        <title>Review queue — 88 Bamboo Events</title>
+        <title>Admin dashboard — 88 Bamboo Events</title>
         <meta name="robots" content="noindex, nofollow" />
       </Head>
-      <ReviewQueue />
+      <AdminDashboard />
     </>
   );
 }

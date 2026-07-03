@@ -83,12 +83,15 @@ export const apiClient = {
   },
 
   async delete(endpoint, config = {}) {
-    const response = await fetch(buildUrl(endpoint, config.params), {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json', ...(config.headers || {}) },
-    });
-    if (!response.ok) throw new Error(`DELETE ${endpoint} failed: ${response.status}`);
-    const data = await response.json().catch(() => null);
-    return { data };
+    try {
+      const response = await fetch(buildUrl(endpoint, config.params), {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', ...(config.headers || {}) },
+      });
+      const data = await response.json().catch(() => null);
+      return { data, ok: response.ok, status: response.status };
+    } catch (error) {
+      return { data: null, ok: false, status: 0, error };
+    }
   },
 };

@@ -37,4 +37,49 @@ export const adminService = {
       { headers: authHeader(token) },
     );
   },
+
+  // --- Phase 4B: live-listing management, versions, analytics, pricing ---
+
+  async getLive(token) {
+    return apiClient.get('/admin/live', { headers: authHeader(token) });
+  },
+
+  async unpublish(token, eventId, reason) {
+    return apiClient.post(
+      '/admin/unpublish',
+      { event_id: eventId, reason },
+      { headers: authHeader(token) },
+    );
+  },
+
+  async getVersions(token, eventId) {
+    return apiClient.get('/admin/versions', {
+      params: { event_id: eventId },
+      headers: authHeader(token),
+    });
+  },
+
+  async getAnalytics(token) {
+    return apiClient.get('/admin/analytics', { headers: authHeader(token) });
+  },
+
+  async getPricingTiers(token) {
+    return apiClient.get('/admin/pricing-tiers', { headers: authHeader(token) });
+  },
+
+  async createPricingTier(token, tier) {
+    return apiClient.post('/admin/pricing-tiers', tier, { headers: authHeader(token) });
+  },
+
+  async updatePricingTier(token, tierId, tier) {
+    return apiClient.put(`/admin/pricing-tiers/${tierId}`, tier, {
+      headers: authHeader(token),
+    });
+  },
+
+  async deletePricingTier(token, tierId) {
+    return apiClient.delete(`/admin/pricing-tiers/${tierId}`, {
+      headers: authHeader(token),
+    });
+  },
 };

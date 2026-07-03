@@ -178,9 +178,20 @@ def create_routes():
 create_routes()
 
 
-# NOTE (Phase 4): APScheduler background jobs (scripts/scheduled_tasks.py) will
-# be initialised here, guarded so they only start in the main (non-reloader)
-# process. Not wired yet — see plan.md checklist Phase 4.
+# ---------------------------------------------------------------------------
+# APScheduler background safety jobs (Phase 4B — plan §6/§8, PATTERN-SPEC §A8).
+# scripts/scheduled_tasks.py holds the jobs (hourly auto-release + expiry alerts,
+# daily digest); start_scheduler() is guarded so the jobs run in exactly ONE
+# process (single gevent worker under gunicorn; the WERKZEUG_RUN_MAIN child under
+# the dev reloader). Run at import time so gunicorn's worker starts it too — not
+# only in the __main__ dev path.
+# ---------------------------------------------------------------------------
+from scripts.scheduled_tasks import start_scheduler  # noqa: E402  (after create_routes)
+
+# main_module tells the guard whether we're `python app.py` (__main__, where the
+# Werkzeug reloader can double-fire) vs an import under gunicorn (the compose path,
+# single worker — always start). See scheduler_should_run().
+start_scheduler(app, main_module=(__name__ == "__main__"))
 
 
 if __name__ == "__main__":
