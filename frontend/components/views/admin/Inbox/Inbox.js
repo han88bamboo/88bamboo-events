@@ -1,7 +1,9 @@
-// Inbox — events with unread submitter replies (post-launch messaging). Lists the
-// threads awaiting the admin's attention, newest reply first; clicking one opens
-// the ConversationPanel (which marks it read). Complements the per-card "Message"
-// buttons on the Pending / Live tabs.
+// Inbox — EVERY event that has a conversation (post-launch messaging), newest
+// activity first (owner request 2026-07-04: read threads stay visible for the
+// record). A red unread pill shows only while there are submitter replies the
+// admin hasn't read; a read thread still appears, badged with its message count.
+// Clicking one opens the ConversationPanel (which marks it read). Complements the
+// per-card "Message" buttons on the Pending / Live tabs.
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 
@@ -69,7 +71,7 @@ function Inbox() {
       {loading ? (
         <p className="text-muted">Loading…</p>
       ) : items.length === 0 ? (
-        <p className="text-muted">No unread replies. 🎉</p>
+        <p className="text-muted">No conversations yet.</p>
       ) : (
         <div className="list-group">
           {items.map((it) => (
@@ -88,7 +90,13 @@ function Inbox() {
                   Last reply {formatDateTime(it.last_message_at)}
                 </span>
               </span>
-              <span className="badge bg-danger rounded-pill">{it.unread}</span>
+              {Number(it.unread) > 0 ? (
+                <span className="badge bg-danger rounded-pill">{it.unread} new</span>
+              ) : (
+                <span className="badge bg-light text-muted rounded-pill border">
+                  {it.total} message{Number(it.total) === 1 ? '' : 's'}
+                </span>
+              )}
             </button>
           ))}
         </div>

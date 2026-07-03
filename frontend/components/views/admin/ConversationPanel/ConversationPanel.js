@@ -7,26 +7,9 @@
 // A frozen thread (event no longer 'pending_review') is shown read-only.
 import { useCallback, useEffect, useState } from 'react';
 
+import MessageThread from '@/components/views/MessageThread';
 import { adminService } from '@/core/services/admin';
 import { formatDateTime } from '@/components/views/admin/adminFormat';
-
-function Bubble({ message }) {
-  const fromAdmin = message.sender === 'admin';
-  return (
-    <div className={`d-flex mb-2 ${fromAdmin ? 'justify-content-end' : 'justify-content-start'}`}>
-      <div
-        className={`p-2 px-3 rounded-3 ${fromAdmin ? 'bg-success text-white' : 'bg-light border'}`}
-        style={{ maxWidth: '80%', whiteSpace: 'pre-wrap' }}
-      >
-        <div className="small fw-bold mb-1">{fromAdmin ? 'You (88 Bamboo)' : 'Submitter'}</div>
-        <div>{message.body}</div>
-        <div className={`small mt-1 ${fromAdmin ? 'text-white-50' : 'text-muted'}`}>
-          {formatDateTime(message.created_at)}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function ConversationPanel({ token, eventId, eventName, onClose, onChanged }) {
   const [state, setState] = useState({ loading: true, error: null, data: null });
@@ -86,11 +69,12 @@ function ConversationPanel({ token, eventId, eventName, onClose, onChanged }) {
               ) : (
                 <>
                   <div className="border rounded-3 p-3 mb-3 bg-white" style={{ maxHeight: 320, overflowY: 'auto' }}>
-                    {(data.messages || []).length === 0 ? (
-                      <p className="text-muted mb-0">No messages yet — start the conversation below.</p>
-                    ) : (
-                      data.messages.map((m, i) => <Bubble key={i} message={m} />)
-                    )}
+                    <MessageThread
+                      messages={data.messages || []}
+                      perspective="admin"
+                      formatTime={formatDateTime}
+                      emptyText="No messages yet — start the conversation below."
+                    />
                   </div>
 
                   {sendError && <div className="alert alert-danger">{sendError}</div>}

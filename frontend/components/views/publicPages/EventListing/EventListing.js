@@ -396,9 +396,14 @@ function EventListing({ initialEvents = [], taxonomy, countries = [], initialFil
         <h1 className="tw-text-custom-green mb-0" style={{ fontFamily: 'Sora, sans-serif' }}>
           Drinks &amp; hospitality events
         </h1>
-        <Link href="/submit" className="btn btn-success">
-          List an event
-        </Link>
+        <div className="d-flex gap-2">
+          <Link href="/submit" className="btn btn-success">
+            List an event
+          </Link>
+          <Link href="/account" className="btn btn-outline-success">
+            Manage your listings
+          </Link>
+        </div>
       </div>
 
       {/* Keyword search */}

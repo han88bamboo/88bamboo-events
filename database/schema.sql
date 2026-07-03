@@ -200,6 +200,7 @@ CREATE TABLE event_messages (
     body          TEXT NOT NULL,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     read_by_admin BOOLEAN NOT NULL DEFAULT FALSE,   -- a submitter reply starts unread; admin messages are read by definition
+    read_by_submitter BOOLEAN NOT NULL DEFAULT FALSE, -- symmetric flag: an admin message starts unread-by-submitter; drives the dashboard bell. A submitter's own reply is inserted TRUE. Opening the thread on any surface marks the admin messages read.
     email_sent    BOOLEAN NOT NULL DEFAULT FALSE     -- whether the notification email was dispatched (admin messages)
 );
 

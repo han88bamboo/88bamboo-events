@@ -1214,8 +1214,11 @@ def get_thread():
 
 
 # ---------------------------------------------------------------------------
-# Inbox — events with unread submitter replies, most-recent first. Drives the
-# dashboard's unread badge / Inbox tab.
+# Inbox — EVERY event that has any messages, most-recent activity first (owner
+# request 2026-07-04: read conversations stay visible for the record). `unread`
+# (submitter replies not yet read_by_admin) is a per-row count that still drives
+# the red dot / dashboard badge, but a fully-read conversation now remains listed
+# (unread = 0) instead of being filtered out.
 # ---------------------------------------------------------------------------
 @blueprint.route("/inbox", methods=["GET"])
 @admin_required
@@ -1245,9 +1248,6 @@ def inbox():
                     LIMIT 1
                 ) lv ON TRUE
                 GROUP BY e.id, e.slug, e.current_status, e.submitter_email, pv.name, lv.name
-                HAVING count(*) FILTER (
-                    WHERE m.sender = 'submitter' AND m.read_by_admin = FALSE
-                ) > 0
                 ORDER BY max(m.created_at) DESC
                 """
             )

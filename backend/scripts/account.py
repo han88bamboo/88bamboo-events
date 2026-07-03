@@ -29,6 +29,7 @@ from notifications import (
     send_account_link,
     send_edit_received,
     send_edit_submission_admin,
+    send_reply_admin,
 )
 from payments import cancel_intent
 from rate_limit import RateLimiter, rate_limited
@@ -43,6 +44,9 @@ _PUBLIC_EVENT_BASE_URL = os.getenv(
 
 # Per-IP limit on link requests (email-bomb control — plan §8).
 _link_limiter = RateLimiter(max_requests=5, window_seconds=600)
+
+# Bound reply spam per IP (same shape as the public /messages/reply limiter).
+_reply_limiter = RateLimiter(max_requests=10, window_seconds=600)
 
 
 def _load_active_taxonomy():
@@ -159,7 +163,16 @@ def context():
                         WHERE pv.event_id = e.id
                           AND pv.approval_status = 'pending_review'
                           AND (e.published_version_id IS NULL OR pv.id <> e.published_version_id)
-                    )                    AS has_pending_edit
+                    )                    AS has_pending_edit,
+                    -- Message bell (post-launch): total admin messages, and how many
+                    -- the submitter hasn't read yet (drives the red-vs-black bell).
+                    (SELECT count(*) FROM event_messages m
+                     WHERE m.event_id = e.id AND m.sender = 'admin')
+                                         AS admin_message_count,
+                    (SELECT count(*) FROM event_messages m
+                     WHERE m.event_id = e.id AND m.sender = 'admin'
+                       AND m.read_by_submitter = FALSE)
+                                         AS unread_admin_count
                 FROM events e
                 JOIN LATERAL (
                     -- Display the published version if there is one, else the latest.
@@ -441,3 +454,154 @@ def republish():
         return jsonify({"code": 500, "error": "Could not re-publish. Please try again."}), 500
 
     return jsonify({"code": 200, "data": {"event_id": int(event_id), "status": "published"}}), 200
+
+
+# ===========================================================================
+# Messaging — the DASHBOARD surface of the admin⇄submitter conversation thread
+# (post-launch feature). Third surface onto the SAME event_messages records (the
+# other two: the public emailed page scripts/messages.py, and the admin side in
+# admin.py). Account-token-gated + ownership-checked, reusing _authorize.
+#
+# FREEZE RULE (unchanged): the thread is always READABLE (history for a resolved
+# event), but a reply is only accepted while the event is 'pending_review' — the
+# same gate as the public /messages/reply.
+# ===========================================================================
+
+
+def _event_display_name(cursor, event_id, published_version_id):
+    """The event's display name: the published version's, else the latest one's."""
+    if published_version_id is not None:
+        cursor.execute("SELECT name FROM event_versions WHERE id = %s", (published_version_id,))
+    else:
+        cursor.execute(
+            "SELECT name FROM event_versions WHERE event_id = %s "
+            "ORDER BY version_number DESC, id DESC LIMIT 1",
+            (event_id,),
+        )
+    row = cursor.fetchone()
+    return row["name"] if row else None
+
+
+# ---------------------------------------------------------------------------
+# Read an owned event's thread + open flag + name. Marks the admin messages
+# read_by_submitter=TRUE (clears the dashboard bell) — hence a committing cursor.
+# ---------------------------------------------------------------------------
+@blueprint.route("/messages", methods=["GET"])
+def messages():
+    token = (request.args.get("token") or "").strip()
+    event_id = request.args.get("event_id")
+    try:
+        with db_manager.get_cursor() as cursor:
+            owned, err = _authorize(cursor, token, event_id)
+            if err:
+                return err
+            _email, ev = owned
+
+            # How many admin messages were unread AS OF THIS LOAD — read before the
+            # mark-read UPDATE below so the client (mobile launcher) can still show
+            # the red "you have new messages" bell even though opening the page
+            # clears them server-side (page-load = read, owner-confirmed).
+            cursor.execute(
+                "SELECT count(*) AS n FROM event_messages "
+                "WHERE event_id = %s AND sender = 'admin' AND read_by_submitter = FALSE",
+                (ev["id"],),
+            )
+            unread = cursor.fetchone()["n"]
+
+            # Opening the thread (any surface) marks the admin messages read.
+            cursor.execute(
+                "UPDATE event_messages SET read_by_submitter = TRUE "
+                "WHERE event_id = %s AND sender = 'admin' AND read_by_submitter = FALSE",
+                (ev["id"],),
+            )
+            name = _event_display_name(cursor, ev["id"], ev["published_version_id"])
+            cursor.execute(
+                "SELECT sender, body, created_at FROM event_messages "
+                "WHERE event_id = %s ORDER BY created_at ASC, id ASC",
+                (ev["id"],),
+            )
+            messages_out = [
+                {
+                    "sender": r["sender"],
+                    "body": r["body"],
+                    "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+                }
+                for r in cursor.fetchall()
+            ]
+    except psycopg2.Error:
+        return jsonify({"code": 500, "error": "Database error occurred"}), 500
+
+    return (
+        jsonify(
+            {
+                "code": 200,
+                "data": {
+                    "event": {"name": name, "current_status": ev["current_status"]},
+                    "open": ev["current_status"] == "pending_review",
+                    "unread": unread,
+                    "messages": messages_out,
+                },
+            }
+        ),
+        200,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Post a submitter reply from the dashboard. 409 once the thread is frozen (the
+# event left review). Inserts read_by_submitter=TRUE (their own message) +
+# read_by_admin=FALSE, then notifies the admin — same as the public reply path.
+# ---------------------------------------------------------------------------
+@blueprint.route("/messages/reply", methods=["POST"])
+@rate_limited(_reply_limiter)
+def messages_reply():
+    payload = request.get_json(silent=True) or {}
+    token = (payload.get("token") or "").strip()
+    event_id = payload.get("event_id")
+    text = (payload.get("body") or "").strip()
+    if not text:
+        return jsonify({"code": 400, "error": "A reply message is required."}), 400
+
+    try:
+        with db_manager.get_cursor() as cursor:
+            owned, err = _authorize(cursor, token, event_id)
+            if err:
+                return err
+            _email, ev = owned
+            if ev["current_status"] != "pending_review":
+                return (
+                    jsonify(
+                        {
+                            "code": 409,
+                            "error": "This conversation is closed — your listing is no "
+                            "longer under review, so replies are disabled.",
+                        }
+                    ),
+                    409,
+                )
+
+            cursor.execute(
+                "INSERT INTO event_messages (event_id, sender, body, read_by_admin, "
+                "read_by_submitter) VALUES (%s, 'submitter', %s, FALSE, TRUE)",
+                (ev["id"], text),
+            )
+            name = _event_display_name(cursor, ev["id"], ev["published_version_id"])
+
+            # Admin recipient for the "new reply" alert (active admin, else env).
+            cursor.execute(
+                "SELECT email FROM admin_users WHERE active = TRUE ORDER BY id LIMIT 1"
+            )
+            admin_row = cursor.fetchone()
+            admin_email = admin_row["email"] if admin_row else os.getenv("ADMIN_NOTIFY_EMAIL")
+            submitter_email = ev["submitter_email"]
+    except psycopg2.Error:
+        return jsonify({"code": 500, "error": "Could not send your reply. Please try again."}), 500
+
+    if admin_email:
+        send_reply_admin(
+            admin_email,
+            {"name": name, "submitter_email": submitter_email},
+            text,
+        )
+
+    return jsonify({"code": 200, "data": {"event_id": int(event_id), "status": "sent"}}), 200

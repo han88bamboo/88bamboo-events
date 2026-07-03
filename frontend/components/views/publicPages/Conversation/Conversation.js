@@ -5,30 +5,13 @@
 // client-side. The thread is read-only once the event leaves review (`open=false`).
 import { useState } from 'react';
 
+import MessageThread from '@/components/views/MessageThread';
 import { messagesService } from '@/core/services/messages';
 
 function formatWhen(iso) {
   if (!iso) return '';
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('en-GB', { timeZone: 'UTC' });
-}
-
-function Bubble({ message }) {
-  const mine = message.sender === 'submitter';
-  return (
-    <div className={`d-flex mb-2 ${mine ? 'justify-content-end' : 'justify-content-start'}`}>
-      <div
-        className={`p-2 px-3 rounded-3 ${mine ? 'bg-success text-white' : 'bg-light border'}`}
-        style={{ maxWidth: '80%', whiteSpace: 'pre-wrap' }}
-      >
-        <div className="small fw-bold mb-1">{mine ? 'You' : '88 Bamboo Events'}</div>
-        <div>{message.body}</div>
-        <div className={`small mt-1 ${mine ? 'text-white-50' : 'text-muted'}`}>
-          {formatWhen(message.created_at)}
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function Conversation({ token, initial }) {
@@ -76,11 +59,7 @@ function Conversation({ token, initial }) {
       </p>
 
       <div className="border rounded-3 p-3 mb-3 bg-white" style={{ minHeight: 160 }}>
-        {messages.length === 0 ? (
-          <p className="text-muted mb-0">No messages yet.</p>
-        ) : (
-          messages.map((m, i) => <Bubble key={i} message={m} />)
-        )}
+        <MessageThread messages={messages} perspective="submitter" formatTime={formatWhen} />
       </div>
 
       {error && <div className="alert alert-danger">{error}</div>}

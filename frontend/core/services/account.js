@@ -36,4 +36,16 @@ export const accountService = {
   async republish(token, eventId) {
     return apiClient.post('/account/republish', { token, event_id: eventId });
   },
+
+  // The event's message thread (+ open flag + name). Reading it marks the admin
+  // messages read on the server, which clears the dashboard bell.
+  async getMessages(token, eventId) {
+    return apiClient.get('/account/messages', { params: { token, event_id: eventId } });
+  },
+
+  // Post a submitter reply from the dashboard. Refused (409) once the thread is
+  // frozen (the event has left review).
+  async replyMessage(token, eventId, body) {
+    return apiClient.post('/account/messages/reply', { token, event_id: eventId, body });
+  },
 };

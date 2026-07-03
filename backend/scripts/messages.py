@@ -78,10 +78,17 @@ def _thread_payload(cursor, link):
 def thread():
     token = (request.args.get("token") or "").strip()
     try:
-        with db_manager.get_cursor(commit=False) as cursor:
+        # commit=True: reading the thread marks the admin messages read-by-submitter
+        # (cross-surface — this clears the dashboard bell too, owner-confirmed).
+        with db_manager.get_cursor() as cursor:
             link = resolve_token(cursor, token)
             if not link:
                 return jsonify({"code": 404, "error": "This link is invalid or has expired."}), 404
+            cursor.execute(
+                "UPDATE event_messages SET read_by_submitter = TRUE "
+                "WHERE event_id = %s AND sender = 'admin' AND read_by_submitter = FALSE",
+                (link["event_id"],),
+            )
             payload = _thread_payload(cursor, link)
     except psycopg2.Error:
         return jsonify({"code": 500, "error": "Database error occurred"}), 500
@@ -121,8 +128,8 @@ def reply():
 
             event_id = link["event_id"]
             cursor.execute(
-                "INSERT INTO event_messages (event_id, sender, body, read_by_admin) "
-                "VALUES (%s, 'submitter', %s, FALSE)",
+                "INSERT INTO event_messages (event_id, sender, body, read_by_admin, "
+                "read_by_submitter) VALUES (%s, 'submitter', %s, FALSE, TRUE)",
                 (event_id, text),
             )
             name = _event_name(cursor, event_id, link["published_version_id"])
