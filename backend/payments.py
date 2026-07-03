@@ -123,10 +123,24 @@ def read_capture_before(intent):
 def cancel_intent(payment_intent_id):
     """Release an authorisation hold (free — no fee). Used when the DB save
     fails AFTER a successful authorise, so no orphan hold is left on the card
-    (plan §6 authorise-succeeds-but-DB-save-fails). Best-effort: swallows Stripe
-    errors so it never masks the original failure the caller is handling."""
+    (plan §6 authorise-succeeds-but-DB-save-fails), and when an admin REJECTS a
+    submission (plan §6 reject = free release, NOT a refund — nothing was
+    captured). Best-effort: swallows Stripe errors so it never masks the original
+    failure the caller is handling."""
     try:
         stripe.PaymentIntent.cancel(payment_intent_id)
         return True
     except stripe.error.StripeError:
         return False
+
+
+def capture_intent(payment_intent_id):
+    """Capture a previously-authorised manual-capture hold — this is the moment
+    the card is actually CHARGED (plan §6 approve). Called on admin approval.
+
+    Returns the captured Stripe intent (status 'succeeded'). Raises
+    stripe.error.StripeError if the capture fails — most importantly when the
+    authorisation has lapsed or the card died since authorising (plan §6
+    approve-but-capture-fails): the caller keeps the listing pending, emails the
+    submitter to re-pay via a fresh intent, and does NOT publish."""
+    return stripe.PaymentIntent.capture(payment_intent_id)
