@@ -18,6 +18,15 @@ import smtplib
 from email.mime.text import MIMEText
 
 log = logging.getLogger("mailer")
+log.setLevel(logging.INFO)
+if not log.handlers:
+    # A dedicated handler so the console emails are visible under gunicorn even
+    # though nothing else in the app calls logging.basicConfig() (the root
+    # logger's default level is WARNING, which would otherwise swallow these
+    # INFO-level "emails"). Local proof this app entirely depends on (plan §9).
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(message)s"))
+    log.addHandler(_handler)
 
 # Verified sender identity. Local transports ignore verification; SES requires it
 # (88bamboo.co is verified out-of-sandbox in Phase 7 — plan §3).
