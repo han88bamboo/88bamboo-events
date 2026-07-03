@@ -11,6 +11,9 @@ __pycache__/
 .venv/
 venv/
 
+# Local image-upload stub (development only — see backend/s3_images.py)
+backend/uploads/
+
 # --- Node / Next ---
 node_modules/
 frontend/.next/

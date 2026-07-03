@@ -143,6 +143,13 @@ app.config["POSTGRES_PASSWORD"] = os.getenv("POSTGRES_PASSWORD")
 app.config["POSTGRES_HOST"] = os.getenv("POSTGRES_HOST")
 app.config["POSTGRES_PORT"] = os.getenv("POSTGRES_PORT")
 app.config["POSTGRES_DB"] = os.getenv("POSTGRES_DB")
+
+# Hard cap on request bodies so an oversized image upload is rejected before it
+# is buffered into memory (plan §8 abuse control; the per-image rule lives in
+# submission_validation). Headroom above the image cap covers the text fields.
+_max_image_mb = int(os.getenv("MAX_IMAGE_MB", "5"))
+app.config["MAX_CONTENT_LENGTH"] = (_max_image_mb + 1) * 1024 * 1024
+
 db_manager.init_app(app)  # pool created once, at boot
 
 # Shopify App Proxy HMAC middleware — skipped unless SHOPIFY_PROXY_VERIFY=true

@@ -1,0 +1,427 @@
+// SubmitEvent — the public event submission form (plan §8). Self-contained view
+// (PATTERN-SPEC §B4.2.2). Taxonomy options arrive as props (fetched SSR from the
+// DB-backed /taxonomy endpoint — never hardcoded, plan §7).
+//
+// ROUND 3a: on submit this validates + uploads the image server-side and shows
+// the returned "held" payload. Payment (Stripe Elements) is wired in 3b, so the
+// button here reads "Continue" and the success panel stands in for the checkout
+// step that will consume this payload next round.
+import { useState } from 'react';
+
+import { submissionsService } from '@/core/services/submissions';
+
+// Mirror the server's image rules for fast client-side feedback (the server is
+// still authoritative — submission_validation.py).
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_IMAGE_MB = 5;
+
+const EMPTY = {
+  name: '',
+  submitter_email: '',
+  contact_email: '',
+  start_datetime: '',
+  end_datetime: '',
+  venue_name: '',
+  venue_address: '',
+  country: '',
+  city: '',
+  description: '',
+  link: '',
+  event_format: '',
+  submission_type: '',
+};
+
+function SubmitEvent({ taxonomy }) {
+  const drinkCategories = taxonomy?.drink_categories || [];
+  const eventFormats = taxonomy?.event_formats || [];
+
+  const [fields, setFields] = useState(EMPTY);
+  const [selectedCategories, setSelectedCategories] = useState([]);
+  const [imageFile, setImageFile] = useState(null);
+  const [honeypot, setHoneypot] = useState(''); // must stay empty for real users
+  const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors] = useState([]);
+  const [result, setResult] = useState(null);
+
+  const setField = (key) => (e) =>
+    setFields((prev) => ({ ...prev, [key]: e.target.value }));
+
+  const toggleCategory = (label) =>
+    setSelectedCategories((prev) =>
+      prev.includes(label) ? prev.filter((c) => c !== label) : [...prev, label],
+    );
+
+  const onFileChange = (e) => {
+    const file = e.target.files?.[0] || null;
+    setImageFile(file);
+  };
+
+  // Lightweight client-side pre-check so obvious problems surface without a
+  // round-trip. Returns an array of messages (empty => ok).
+  const clientValidate = () => {
+    const msgs = [];
+    if (!fields.name.trim()) msgs.push('Event name is required.');
+    if (!fields.submitter_email.trim()) msgs.push('Submitter email is required.');
+    if (!fields.start_datetime) msgs.push('Start date/time is required.');
+    if (!fields.end_datetime) msgs.push('End date/time is required.');
+    if (!fields.country.trim()) msgs.push('Country is required.');
+    if (!fields.city.trim()) msgs.push('City is required.');
+    if (!fields.event_format) msgs.push('Event format is required.');
+    if (selectedCategories.length === 0)
+      msgs.push('Select at least one drink category.');
+    if (!imageFile) {
+      msgs.push('An event image is required.');
+    } else {
+      if (!ALLOWED_IMAGE_TYPES.includes(imageFile.type))
+        msgs.push('Image must be a JPEG, PNG, or WebP file.');
+      if (imageFile.size > MAX_IMAGE_MB * 1024 * 1024)
+        msgs.push(`Image is too large (max ${MAX_IMAGE_MB} MB).`);
+    }
+    return msgs;
+  };
+
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    setErrors([]);
+    setResult(null);
+
+    const clientErrors = clientValidate();
+    if (clientErrors.length) {
+      setErrors(clientErrors);
+      return;
+    }
+
+    const formData = new FormData();
+    Object.entries(fields).forEach(([k, v]) => formData.append(k, v));
+    selectedCategories.forEach((c) => formData.append('drink_categories', c));
+    formData.append('company_url', honeypot); // honeypot — server checks it
+    if (imageFile) formData.append('image', imageFile);
+
+    setSubmitting(true);
+    try {
+      const { data, ok } = await submissionsService.submit(formData);
+      if (!ok) {
+        setErrors(
+          data?.errors || [data?.error || 'Submission failed. Please try again.'],
+        );
+        return;
+      }
+      setResult(data?.data || null);
+    } catch (err) {
+      setErrors(['Could not reach the server. Please try again.']);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (result) {
+    return (
+      <main className="container py-5" style={{ maxWidth: 720 }}>
+        <div className="alert alert-success" role="alert">
+          <h4 className="alert-heading">Details received</h4>
+          <p className="mb-0">
+            Your listing details and image were validated and saved for checkout.
+            The payment step (a temporary card hold, not a charge) is added in the
+            next build round.
+          </p>
+        </div>
+        {result.image?.url && (
+          // Plain <img> (not next/image): the local stub host is not in the
+          // next.config remotePatterns allowlist, and this is just a preview.
+          <img
+            src={result.image.url}
+            alt="Uploaded event"
+            className="img-fluid rounded mb-3"
+            style={{ maxHeight: 260 }}
+          />
+        )}
+        <h5>Validated submission</h5>
+        <pre className="bg-light p-3 rounded" style={{ whiteSpace: 'pre-wrap' }}>
+          {JSON.stringify(result.event, null, 2)}
+        </pre>
+        <button
+          type="button"
+          className="btn btn-outline-secondary"
+          onClick={() => {
+            setResult(null);
+            setFields(EMPTY);
+            setSelectedCategories([]);
+            setImageFile(null);
+          }}
+        >
+          Submit another
+        </button>
+      </main>
+    );
+  }
+
+  return (
+    <main className="container py-5" style={{ maxWidth: 720 }}>
+      <h1 className="tw-text-custom-green mb-1" style={{ fontFamily: 'Sora, sans-serif' }}>
+        List an event
+      </h1>
+      <p className="text-muted">
+        Submit your drinks or hospitality event. Listings go live after review;
+        the USD 5 fee is only charged if your listing is approved.
+      </p>
+
+      {errors.length > 0 && (
+        <div className="alert alert-danger" role="alert">
+          <ul className="mb-0">
+            {errors.map((msg, i) => (
+              <li key={i}>{msg}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <form onSubmit={onSubmit} noValidate>
+        {/* Honeypot: hidden from users, tab-skipped, autocomplete off. A filled
+            value flags a bot server-side (plan §8). */}
+        <div
+          aria-hidden="true"
+          style={{ position: 'absolute', left: '-9999px', top: 'auto', height: 0, overflow: 'hidden' }}
+        >
+          <label htmlFor="company_url">Company URL (leave blank)</label>
+          <input
+            id="company_url"
+            name="company_url"
+            type="text"
+            tabIndex={-1}
+            autoComplete="off"
+            value={honeypot}
+            onChange={(e) => setHoneypot(e.target.value)}
+          />
+        </div>
+
+        <div className="mb-3">
+          <label className="form-label" htmlFor="name">
+            Event name <span className="text-danger">*</span>
+          </label>
+          <input
+            id="name"
+            className="form-control"
+            value={fields.name}
+            onChange={setField('name')}
+            maxLength={500}
+            required
+          />
+        </div>
+
+        <div className="row">
+          <div className="col-md-6 mb-3">
+            <label className="form-label" htmlFor="submitter_email">
+              Your email <span className="text-danger">*</span>
+            </label>
+            <input
+              id="submitter_email"
+              type="email"
+              className="form-control"
+              value={fields.submitter_email}
+              onChange={setField('submitter_email')}
+              required
+            />
+            <div className="form-text">Where we send review updates.</div>
+          </div>
+          <div className="col-md-6 mb-3">
+            <label className="form-label" htmlFor="contact_email">
+              Public contact email
+            </label>
+            <input
+              id="contact_email"
+              type="email"
+              className="form-control"
+              value={fields.contact_email}
+              onChange={setField('contact_email')}
+            />
+            <div className="form-text">Shown on the listing (optional).</div>
+          </div>
+        </div>
+
+        <div className="row">
+          <div className="col-md-6 mb-3">
+            <label className="form-label" htmlFor="start_datetime">
+              Starts <span className="text-danger">*</span>
+            </label>
+            <input
+              id="start_datetime"
+              type="datetime-local"
+              className="form-control"
+              value={fields.start_datetime}
+              onChange={setField('start_datetime')}
+              required
+            />
+          </div>
+          <div className="col-md-6 mb-3">
+            <label className="form-label" htmlFor="end_datetime">
+              Ends <span className="text-danger">*</span>
+            </label>
+            <input
+              id="end_datetime"
+              type="datetime-local"
+              className="form-control"
+              value={fields.end_datetime}
+              onChange={setField('end_datetime')}
+              required
+            />
+          </div>
+        </div>
+
+        <div className="mb-3">
+          <label className="form-label" htmlFor="venue_name">
+            Venue name
+          </label>
+          <input
+            id="venue_name"
+            className="form-control"
+            value={fields.venue_name}
+            onChange={setField('venue_name')}
+            maxLength={500}
+          />
+        </div>
+
+        <div className="mb-3">
+          <label className="form-label" htmlFor="venue_address">
+            Venue address
+          </label>
+          <input
+            id="venue_address"
+            className="form-control"
+            value={fields.venue_address}
+            onChange={setField('venue_address')}
+          />
+        </div>
+
+        <div className="row">
+          <div className="col-md-6 mb-3">
+            <label className="form-label" htmlFor="country">
+              Country <span className="text-danger">*</span>
+            </label>
+            <input
+              id="country"
+              className="form-control"
+              value={fields.country}
+              onChange={setField('country')}
+              required
+            />
+          </div>
+          <div className="col-md-6 mb-3">
+            <label className="form-label" htmlFor="city">
+              City <span className="text-danger">*</span>
+            </label>
+            <input
+              id="city"
+              className="form-control"
+              value={fields.city}
+              onChange={setField('city')}
+              required
+            />
+          </div>
+        </div>
+
+        <div className="mb-3">
+          <label className="form-label" htmlFor="event_format">
+            Event format <span className="text-danger">*</span>
+          </label>
+          <select
+            id="event_format"
+            className="form-select"
+            value={fields.event_format}
+            onChange={setField('event_format')}
+            required
+          >
+            <option value="">Choose…</option>
+            {eventFormats.map((f) => (
+              <option key={f.id} value={f.label}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="mb-3">
+          <label className="form-label d-block">
+            Drink categories <span className="text-danger">*</span>
+          </label>
+          <div className="d-flex flex-wrap gap-3">
+            {drinkCategories.map((c) => (
+              <div className="form-check" key={c.id}>
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id={`cat-${c.id}`}
+                  checked={selectedCategories.includes(c.label)}
+                  onChange={() => toggleCategory(c.label)}
+                />
+                <label className="form-check-label" htmlFor={`cat-${c.id}`}>
+                  {c.label}
+                </label>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mb-3">
+          <label className="form-label" htmlFor="description">
+            Description
+          </label>
+          <textarea
+            id="description"
+            className="form-control"
+            rows={4}
+            value={fields.description}
+            onChange={setField('description')}
+          />
+        </div>
+
+        <div className="mb-3">
+          <label className="form-label" htmlFor="link">
+            Event link
+          </label>
+          <input
+            id="link"
+            type="url"
+            className="form-control"
+            value={fields.link}
+            onChange={setField('link')}
+            placeholder="https://…"
+          />
+        </div>
+
+        <div className="mb-3">
+          <label className="form-label" htmlFor="submission_type">
+            Submitter type
+          </label>
+          <input
+            id="submission_type"
+            className="form-control"
+            value={fields.submission_type}
+            onChange={setField('submission_type')}
+            placeholder="e.g. bar, brand, agency"
+            maxLength={255}
+          />
+        </div>
+
+        <div className="mb-4">
+          <label className="form-label" htmlFor="image">
+            Event image <span className="text-danger">*</span>
+          </label>
+          <input
+            id="image"
+            type="file"
+            className="form-control"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={onFileChange}
+          />
+          <div className="form-text">JPEG, PNG, or WebP, up to {MAX_IMAGE_MB} MB.</div>
+        </div>
+
+        <button type="submit" className="btn btn-success" disabled={submitting}>
+          {submitting ? 'Uploading…' : 'Continue'}
+        </button>
+      </form>
+    </main>
+  );
+}
+
+export default SubmitEvent;
