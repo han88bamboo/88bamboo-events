@@ -100,6 +100,21 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
         event image stays as-is.
       </p>
 
+      {src.image_url && (
+        <div className="mb-3">
+          <label className="form-label d-block">Current image</label>
+          {/* Plain <img> (not next/image): the S3/stub host isn't guaranteed in
+              the next/image allowlist, and this is a read-only preview. */}
+          <img
+            src={src.image_url}
+            alt={src.name || 'Event image'}
+            className="img-thumbnail"
+            style={{ maxHeight: 200, objectFit: 'cover' }}
+          />
+          <div className="form-text">The event image can’t be changed here.</div>
+        </div>
+      )}
+
       {errors.length > 0 && (
         <div className="alert alert-danger">
           <ul className="mb-0">

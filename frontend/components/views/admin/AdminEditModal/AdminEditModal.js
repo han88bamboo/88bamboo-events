@@ -14,6 +14,17 @@ import EditEvent from '@/components/views/publicPages/EditEvent';
 import { adminService } from '@/core/services/admin';
 import { submissionsService } from '@/core/services/submissions';
 
+// The admin list endpoints (/admin/pending, /admin/live) serialise datetimes as
+// RFC-1123 (Flask jsonify's default, e.g. "Sat, 04 Jul 2026 01:37:00 GMT"), but
+// EditEvent's datetime-local inputs expect an ISO 'YYYY-MM-DDTHH:MM' prefix. Parse
+// and re-emit as UTC ISO so the fields prefill (and match the as-entered wall time,
+// consistent with the app's UTC-pinned display).
+function toIso(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? value : d.toISOString();
+}
+
 function buildContext(item, isLive) {
   return {
     is_published: isLive,
@@ -21,8 +32,8 @@ function buildContext(item, isLive) {
       name: item.name || '',
       submitter_email: item.submitter_email || '',
       contact_email: item.contact_email || '',
-      start_datetime: item.start_datetime || null,
-      end_datetime: item.end_datetime || null,
+      start_datetime: toIso(item.start_datetime),
+      end_datetime: toIso(item.end_datetime),
       venue_name: item.venue_name || '',
       venue_address: item.venue_address || '',
       country: item.country || '',
