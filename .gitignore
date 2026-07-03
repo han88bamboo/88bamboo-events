@@ -1,4 +1,5 @@
 # --- Secrets / env (never commit real values) ---
+/.env
 backend/.env
 database/.env
 frontend/.env.local
