@@ -1,0 +1,40 @@
+# terraform.tfvars.example — copy to terraform.tfvars and fill in.
+#
+#   cp terraform.tfvars.example terraform.tfvars
+#
+# terraform.tfvars is GIT-IGNORED (live secrets). Never commit it; never paste
+# real secret values into chat.
+
+# --- Network: public subnets to run the events task in (>= 2 AZs) -----------
+# Find them with the CLI command in README.md.
+public_subnet_ids = ["subnet-AAAA", "subnet-BBBB"]
+
+# --- Shared Drink-X ALB ------------------------------------------------------
+# Name of the existing ALB (aws elbv2 describe-load-balancers — see README.md).
+existing_alb_name = "tf-drinkx-prod-alb-REPLACE_ME"
+# listener_rule_priority = 100   # bump if it collides with a Drink-X rule
+# drinkx_alb_sg_id       = "sg-0d624dda1e1f4c7d9"  # default matches the SPEC dump
+
+# --- Shared drinkxprod RDS ---------------------------------------------------
+# The endpoint + SG defaults already match the SPEC dump; override only if wrong.
+# db_host          = "drinkxprod.cxoa4asusd0j.ap-southeast-1.rds.amazonaws.com"
+# drinkx_rds_sg_id = "sg-05dba46a6d301d9b6"
+#
+# Password for the events_app DB user you create in the bootstrap (README.md).
+db_password = "CHANGE_ME_strong_events_app_password"
+#
+# Leave false and open the RDS SG by hand (README.md). Only set true if the
+# Drink-X RDS SG is NOT managed with inline rules elsewhere.
+# manage_rds_ingress_rule = false
+
+# --- Application secrets (plain ECS env — plan §9) ---------------------------
+stripe_secret_key     = "sk_test_CHANGE_ME"   # sk_live_ at go-live
+stripe_webhook_secret = "whsec_CHANGE_ME"     # from the prod webhook endpoint
+shopify_shared_secret = "CHANGE_ME"           # custom-app shared secret
+admin_session_secret  = "CHANGE_ME_long_random_string"  # openssl rand -hex 32
+
+# --- Non-secret app config (defaults are production-ready) -------------------
+# public_event_base_url = "https://www.88bamboo.co/a/events"
+# ses_sender            = "events@88bamboo.co"
+# admin_notify_email    = "events@88bamboo.co"
+# enable_ses            = true

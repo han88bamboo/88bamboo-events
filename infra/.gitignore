@@ -1,0 +1,10 @@
+# Terraform — never commit state (contains secrets) or the real tfvars.
+*.tfstate
+*.tfstate.*
+.terraform/
+terraform.tfvars
+# NOTE: .terraform.lock.hcl is intentionally NOT ignored — commit it to pin
+# provider versions/hashes across machines.
+crash.log
+crash.*.log
+*.tfplan
