@@ -35,11 +35,21 @@ def _format_fee(amount, currency):
     return f"{currency} {text}"
 
 
-def send_under_review(recipient, event, amount, currency):
+def send_under_review(recipient, event, amount, currency, edit_url=None):
     """Submitter confirmation. The body is the plan §8 review-window wording
     (kept verbatim so the hold-not-a-charge promise is exact), with the fee
-    interpolated from the active tier."""
+    interpolated from the active tier. When an `edit_url` is supplied it carries a
+    pre-approval magic edit link (plan §7) — how a still-pending submitter (whose
+    listing has no public slug yet) can amend it while it's in the queue."""
     fee = _format_fee(amount, currency)
+    # 30-min expiry matches the magic_links default; state it so the link's short
+    # life isn't a surprise.
+    edit_line = (
+        f"\nSpotted a mistake? You can edit your submission within 30 minutes "
+        f"here:\n{edit_url}\n"
+        if edit_url
+        else ""
+    )
     subject = "We received your event submission — under review"
     body = (
         f"Hi,\n\n"
@@ -49,7 +59,8 @@ def send_under_review(recipient, event, amount, currency):
         f"goes live and the {fee} is charged then. If we reject it, the hold is "
         f"released and you are never charged. If we can't review it within the "
         f"authorisation window, the hold is automatically released with no "
-        f"charge and you're welcome to resubmit.\n\n"
+        f"charge and you're welcome to resubmit.\n"
+        f"{edit_line}\n"
         f"Event: {event.get('name')}\n"
         f"When:  {event.get('start_datetime')} — {event.get('end_datetime')}\n"
         f"Where: {event.get('city')}, {event.get('country')}\n\n"

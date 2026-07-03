@@ -32,6 +32,7 @@ from flask import Blueprint, jsonify, request
 from psycopg2.extras import Json
 
 from app import db_manager
+from magic_links import create_magic_link
 from notifications import send_new_submission_admin, send_under_review
 from payments import (
     cancel_intent,
@@ -61,6 +62,12 @@ _limiter = RateLimiter(max_requests=5, window_seconds=600)
 
 # Image size cap (env-overridable; defaults to 5 MB — submission_validation).
 _MAX_IMAGE_BYTES = int(os.getenv("MAX_IMAGE_MB", "5")) * 1024 * 1024
+
+# Public base for the pre-approval edit link emailed with the under-review
+# confirmation (plan §7). Same env var + local default as admin.py / edits.py.
+_PUBLIC_EVENT_BASE_URL = os.getenv(
+    "PUBLIC_EVENT_BASE_URL", "http://localhost:8080/a/events"
+).rstrip("/")
 
 
 def _load_active_taxonomy():
@@ -341,6 +348,14 @@ def create_intent():
                     ),
                 )
 
+            # Mint a pre-approval edit link (plan §7) so the submitter can amend
+            # this listing while it sits in the review queue — a still-pending
+            # event has no public slug, so the manage page can't reach it; the
+            # link in the under-review email is how they self-serve an edit. The
+            # hash is stored in this same transaction; the raw token is emailed
+            # below. 30-min expiry (magic_links default).
+            edit_token, _ = create_magic_link(cursor, event_id)
+
             # Read the admin recipient inside the same connection (used after
             # commit for the notification email).
             cursor.execute(
@@ -368,7 +383,9 @@ def create_intent():
 
     # 5) Emails (best-effort, AFTER commit — plan §8). A mail failure must not
     #    undo the authorised, persisted submission (Phase-4 digest backstops it).
-    send_under_review(cleaned["submitter_email"], cleaned, amount, currency)
+    #    The under-review email carries the pre-approval edit link (plan §7).
+    edit_url = f"{_PUBLIC_EVENT_BASE_URL}/edit?token={edit_token}"
+    send_under_review(cleaned["submitter_email"], cleaned, amount, currency, edit_url=edit_url)
     if admin_email:
         send_new_submission_admin(
             admin_email, cleaned, amount, currency, capture_before, is_duplicate
