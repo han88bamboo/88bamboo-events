@@ -27,6 +27,13 @@ from datetime import datetime, timedelta, timezone
 _TOKEN_BYTES = 32
 DEFAULT_TTL_MINUTES = 60 * 24  # 24 hours (was 30 minutes at Phase-5 launch)
 
+# Conversation reply links are effectively indefinite: the REAL lifetime gate is
+# the event's state (a thread freezes once the event leaves 'pending_review'), so
+# the token's own expiry is set far out and never becomes the limiting factor
+# (owner decision — a review conversation stays open as long as the event is under
+# review). ~100 years.
+CONVERSATION_TTL_MINUTES = 60 * 24 * 365 * 100
+
 
 def generate_token():
     """Return a fresh, high-entropy URL-safe raw token (the value emailed to the
@@ -53,6 +60,15 @@ def create_magic_link(cursor, event_id, ttl_minutes=DEFAULT_TTL_MINUTES):
     )
     link_id = cursor.fetchone()["id"]
     return raw_token, link_id
+
+
+def create_conversation_link(cursor, event_id):
+    """Mint a per-event magic link for a messaging thread (admin⇄submitter). Same
+    hashed-token shape as an edit link but with an effectively-indefinite expiry
+    (see CONVERSATION_TTL_MINUTES) — the thread's real open/closed gate is the
+    event state, checked in the messaging endpoints. Returns the RAW token for
+    emailing. Resolved with the shared resolve_token (it's an event-scoped link)."""
+    return create_magic_link(cursor, event_id, ttl_minutes=CONVERSATION_TTL_MINUTES)
 
 
 def resolve_token(cursor, raw_token):

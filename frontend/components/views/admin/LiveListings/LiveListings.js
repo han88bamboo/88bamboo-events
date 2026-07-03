@@ -14,6 +14,8 @@ import { useRouter } from 'next/router';
 import { adminService } from '@/core/services/admin';
 import { adminAuth } from '@/core/services/adminAuth';
 import { formatDateTime, formatFee } from '@/components/views/admin/adminFormat';
+import AdminEditModal from '@/components/views/admin/AdminEditModal';
+import ConversationPanel from '@/components/views/admin/ConversationPanel';
 
 function StatusBadge({ status, isPast }) {
   if (status === 'published') {
@@ -78,7 +80,7 @@ function VersionChain({ token, eventId }) {
   );
 }
 
-function ListingRow({ item, token, onUnpublish, busy }) {
+function ListingRow({ item, token, onUnpublish, onEdit, onMessage, busy }) {
   const [showHistory, setShowHistory] = useState(false);
   const muted = item.is_past || item.current_status !== 'published';
 
@@ -118,15 +120,32 @@ function ListingRow({ item, token, onUnpublish, busy }) {
 
             <div className="d-flex gap-2 align-items-center">
               {item.current_status === 'published' && (
-                <button
-                  type="button"
-                  className="btn btn-outline-dark btn-sm"
-                  disabled={busy}
-                  onClick={() => onUnpublish(item)}
-                >
-                  Unpublish
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-outline-dark btn-sm"
+                    disabled={busy}
+                    onClick={() => onUnpublish(item)}
+                  >
+                    Unpublish
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-sm"
+                    disabled={busy}
+                    onClick={() => onEdit(item)}
+                  >
+                    Edit
+                  </button>
+                </>
               )}
+              <button
+                type="button"
+                className="btn btn-outline-primary btn-sm"
+                onClick={() => onMessage(item)}
+              >
+                Messages
+              </button>
               <button
                 type="button"
                 className="btn btn-link btn-sm text-muted p-0"
@@ -148,7 +167,7 @@ function ListingRow({ item, token, onUnpublish, busy }) {
   );
 }
 
-function Section({ title, items, token, onUnpublish, busyId }) {
+function Section({ title, items, token, onUnpublish, onEdit, onMessage, busyId }) {
   if (items.length === 0) return null;
   return (
     <section className="mb-4">
@@ -159,6 +178,8 @@ function Section({ title, items, token, onUnpublish, busyId }) {
           item={item}
           token={token}
           onUnpublish={onUnpublish}
+          onEdit={onEdit}
+          onMessage={onMessage}
           busy={busyId === item.event_id}
         />
       ))}
@@ -173,6 +194,8 @@ function LiveListings() {
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [editItem, setEditItem] = useState(null);
+  const [msgItem, setMsgItem] = useState(null);
 
   const load = useCallback(async () => {
     const token = adminAuth.getToken();
@@ -250,10 +273,33 @@ function LiveListings() {
         <p className="text-muted">No published listings yet.</p>
       ) : (
         <>
-          <Section title="Live" items={live} token={token} onUnpublish={onUnpublish} busyId={busyId} />
-          <Section title="Past" items={past} token={token} onUnpublish={onUnpublish} busyId={busyId} />
-          <Section title="Off the board" items={off} token={token} onUnpublish={onUnpublish} busyId={busyId} />
+          <Section title="Live" items={live} token={token} onUnpublish={onUnpublish} onEdit={setEditItem} onMessage={setMsgItem} busyId={busyId} />
+          <Section title="Past" items={past} token={token} onUnpublish={onUnpublish} onEdit={setEditItem} onMessage={setMsgItem} busyId={busyId} />
+          <Section title="Off the board" items={off} token={token} onUnpublish={onUnpublish} onEdit={setEditItem} onMessage={setMsgItem} busyId={busyId} />
         </>
+      )}
+
+      {editItem && (
+        <AdminEditModal
+          token={token}
+          item={editItem}
+          isLive
+          onClose={() => setEditItem(null)}
+          onSaved={() => {
+            setEditItem(null);
+            setNotice(`Updated “${editItem.name}” — the live listing now shows your changes.`);
+            load();
+          }}
+        />
+      )}
+
+      {msgItem && (
+        <ConversationPanel
+          token={token}
+          eventId={msgItem.event_id}
+          eventName={msgItem.name}
+          onClose={() => setMsgItem(null)}
+        />
       )}
     </main>
   );

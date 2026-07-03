@@ -12,6 +12,8 @@ import { useRouter } from 'next/router';
 
 import { adminService } from '@/core/services/admin';
 import { adminAuth } from '@/core/services/adminAuth';
+import AdminEditModal from '@/components/views/admin/AdminEditModal';
+import ConversationPanel from '@/components/views/admin/ConversationPanel';
 
 function formatDateTime(value) {
   if (!value) return '—';
@@ -27,7 +29,7 @@ function formatFee(amount, currency) {
   return `${currency || 'USD'} ${text}`;
 }
 
-function PendingCard({ item, onApprove, onReject, busy }) {
+function PendingCard({ item, onApprove, onReject, onEdit, onMessage, busy }) {
   const [showReject, setShowReject] = useState(false);
   const [reason, setReason] = useState('');
 
@@ -129,6 +131,22 @@ function PendingCard({ item, onApprove, onReject, busy }) {
                 >
                   Reject
                 </button>
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary btn-sm"
+                  disabled={busy}
+                  onClick={() => onEdit(item)}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline-primary btn-sm"
+                  disabled={busy}
+                  onClick={() => onMessage(item)}
+                >
+                  Message
+                </button>
               </div>
             ) : (
               <div className="mt-3">
@@ -177,6 +195,8 @@ function ReviewQueue() {
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [editItem, setEditItem] = useState(null);
+  const [msgItem, setMsgItem] = useState(null);
 
   const load = useCallback(async () => {
     const token = adminAuth.getToken();
@@ -289,8 +309,33 @@ function ReviewQueue() {
             busy={busyId === item.version_id}
             onApprove={onApprove}
             onReject={onReject}
+            onEdit={setEditItem}
+            onMessage={setMsgItem}
           />
         ))
+      )}
+
+      {editItem && (
+        <AdminEditModal
+          token={adminAuth.getToken()}
+          item={editItem}
+          isLive={false}
+          onClose={() => setEditItem(null)}
+          onSaved={() => {
+            setEditItem(null);
+            setNotice('Edit saved — the updated version is pending your approval.');
+            load();
+          }}
+        />
+      )}
+
+      {msgItem && (
+        <ConversationPanel
+          token={adminAuth.getToken()}
+          eventId={msgItem.event_id}
+          eventName={msgItem.name}
+          onClose={() => setMsgItem(null)}
+        />
       )}
     </main>
   );

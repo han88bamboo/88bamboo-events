@@ -16,11 +16,14 @@ import ReviewQueue from '@/components/views/admin/ReviewQueue';
 import LiveListings from '@/components/views/admin/LiveListings';
 import PricingTiers from '@/components/views/admin/PricingTiers';
 import Analytics from '@/components/views/admin/Analytics';
+import Inbox from '@/components/views/admin/Inbox';
+import { adminService } from '@/core/services/admin';
 import { adminAuth } from '@/core/services/adminAuth';
 
 const TABS = [
   { key: 'pending', label: 'Pending review' },
   { key: 'live', label: 'Live listings' },
+  { key: 'inbox', label: 'Inbox' },
   { key: 'pricing', label: 'Pricing' },
   { key: 'analytics', label: 'Analytics' },
 ];
@@ -28,12 +31,30 @@ const TABS = [
 function AdminDashboard() {
   const router = useRouter();
   const [tab, setTab] = useState('pending');
+  const [unread, setUnread] = useState(0);
 
   // Client-side session guard (the SSR cookie guard already gates the page; this
   // catches a token cleared after navigation).
   useEffect(() => {
     if (!adminAuth.getToken()) router.replace('/admin/login');
   }, [router]);
+
+  // Unread-reply badge on the Inbox tab. Refreshed on mount and whenever the tab
+  // changes (opening a thread marks it read, so leaving Inbox should update it).
+  useEffect(() => {
+    const token = adminAuth.getToken();
+    if (!token) return;
+    let alive = true;
+    (async () => {
+      const { data } = await adminService.getInbox(token);
+      if (!alive || data?.code !== 200) return;
+      const total = (data.data || []).reduce((n, it) => n + Number(it.unread || 0), 0);
+      setUnread(total);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [tab]);
 
   return (
     <div>
@@ -47,6 +68,9 @@ function AdminDashboard() {
                 onClick={() => setTab(t.key)}
               >
                 {t.label}
+                {t.key === 'inbox' && unread > 0 && (
+                  <span className="badge bg-danger rounded-pill ms-2">{unread}</span>
+                )}
               </button>
             </li>
           ))}
@@ -55,6 +79,7 @@ function AdminDashboard() {
 
       {tab === 'pending' && <ReviewQueue />}
       {tab === 'live' && <LiveListings />}
+      {tab === 'inbox' && <Inbox />}
       {tab === 'pricing' && <PricingTiers />}
       {tab === 'analytics' && <Analytics />}
     </div>

@@ -82,4 +82,38 @@ export const adminService = {
       headers: authHeader(token),
     });
   },
+
+  // --- Post-launch: admin content edit + admin⇄submitter messaging ---
+
+  // Edit a listing directly. `notify`/`notifyMessage` only take effect when the
+  // edit goes live (a published-listing edit) — enforced server-side.
+  async edit(token, versionId, event, notify, notifyMessage) {
+    return apiClient.post(
+      '/admin/edit',
+      { version_id: versionId, event, notify: !!notify, notify_message: notifyMessage || '' },
+      { headers: authHeader(token) },
+    );
+  },
+
+  // Send a message to the submitter (only while the event is under review).
+  async sendMessage(token, eventId, body) {
+    return apiClient.post(
+      '/admin/messages',
+      { event_id: eventId, body },
+      { headers: authHeader(token) },
+    );
+  },
+
+  // Read one event's thread (marks the submitter's messages read).
+  async getThread(token, eventId) {
+    return apiClient.get('/admin/messages', {
+      params: { event_id: eventId },
+      headers: authHeader(token),
+    });
+  },
+
+  // Events with unread submitter replies (drives the Inbox tab + badge).
+  async getInbox(token) {
+    return apiClient.get('/admin/inbox', { headers: authHeader(token) });
+  },
 };

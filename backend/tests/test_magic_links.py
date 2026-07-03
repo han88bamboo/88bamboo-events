@@ -44,5 +44,45 @@ class HashTokenTests(unittest.TestCase):
         self.assertEqual(len(magic_links.hash_token(None)), 64)
 
 
+class ConversationLinkTests(unittest.TestCase):
+    """create_conversation_link mints an effectively-indefinite per-event link
+    (post-launch messaging): the real open/closed gate is the event state, so the
+    token's own expiry must be set far enough out never to be the limiting factor."""
+
+    class _FakeCursor:
+        def __init__(self):
+            self.executed = []
+
+        def execute(self, sql, params=None):
+            self.executed.append((sql, params))
+
+        def fetchone(self):
+            return {"id": 1}
+
+    def test_conversation_ttl_is_far_larger_than_edit_ttl(self):
+        # Edit links are 24h; conversation links are ~100 years.
+        self.assertGreater(
+            magic_links.CONVERSATION_TTL_MINUTES,
+            magic_links.DEFAULT_TTL_MINUTES * 1000,
+        )
+
+    def test_conversation_link_expiry_is_effectively_indefinite(self):
+        from datetime import datetime, timedelta, timezone
+
+        cur = self._FakeCursor()
+        raw_token, link_id = magic_links.create_conversation_link(cur, event_id=5)
+        self.assertTrue(raw_token)
+        self.assertEqual(link_id, 1)
+
+        # The INSERT bound (event_id, token_hash, expires_at). Expiry is decades out.
+        _, params = cur.executed[0]
+        event_id, token_hash, expires_at = params
+        self.assertEqual(event_id, 5)
+        self.assertEqual(token_hash, magic_links.hash_token(raw_token))
+        self.assertGreater(
+            expires_at, datetime.now(timezone.utc) + timedelta(days=365 * 50)
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

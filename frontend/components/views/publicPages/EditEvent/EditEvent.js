@@ -4,15 +4,21 @@
 // SubmitEvent, minus the image + honeypot.
 //
 // Transport-agnostic: the caller passes `onSubmit(eventFields)` returning the
-// apiClient-shaped `{ data, ok }`, so the same form serves both the per-event
-// magic link (/edit) and the account dashboard (/my-events/<id>). `onCancel` is
-// optional (the account flow shows a "Cancel" back to the event view).
+// apiClient-shaped `{ data, ok }`, so the same form serves the per-event magic
+// link (/edit), the account dashboard (/my-events/<id>), AND the admin dashboard.
+// `onCancel` is optional (the account flow shows a "Cancel" back to the event view).
+//
+// Optional presentation props (all default to the submitter-edit copy so existing
+// callers are unchanged): `submitLabel` overrides the submit button text; `extras`
+// renders extra controls just above the buttons (the admin's "inform them" option);
+// `successNode` replaces the default "under review" screen (the admin edit shows a
+// "saved/published" message instead).
 import { useState } from 'react';
 
 // datetime-local wants 'YYYY-MM-DDTHH:MM'; the API returns full ISO strings.
 const toLocalInput = (iso) => (iso ? String(iso).slice(0, 16) : '');
 
-function EditEvent({ context, taxonomy, onSubmit, onCancel }) {
+function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras, successNode }) {
   const drinkCategories = taxonomy?.drink_categories || [];
   const eventFormats = taxonomy?.event_formats || [];
   const src = context?.event || {};
@@ -67,6 +73,7 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel }) {
   };
 
   if (done) {
+    if (successNode) return successNode;
     return (
       <main className="container py-5" style={{ maxWidth: 720 }}>
         <div className="alert alert-success">
@@ -190,9 +197,11 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel }) {
           <input id="submission_type" className="form-control" value={fields.submission_type} onChange={setField('submission_type')} maxLength={255} placeholder="e.g. bar, brand, agency" />
         </div>
 
+        {extras}
+
         <div className="d-flex gap-2">
           <button type="submit" className="btn btn-success" disabled={submitting}>
-            {submitting ? 'Saving…' : 'Submit changes for review'}
+            {submitting ? 'Saving…' : submitLabel || 'Submit changes for review'}
           </button>
           {onCancel && (
             <button type="button" className="btn btn-outline-secondary" onClick={onCancel} disabled={submitting}>

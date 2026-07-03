@@ -26,14 +26,19 @@ from psycopg2.extras import Json
 
 from app import db_manager
 from admin_auth import admin_required, issue_session_token
+from event_versioning import create_edit_version
+from magic_links import create_conversation_link
 from notifications import (
+    send_admin_message,
     send_approved,
     send_edit_approved,
+    send_listing_updated,
     send_rejected,
     send_repay_required,
 )
 from payments import cancel_intent, capture_intent
 from slugs import generate_unique_slug
+from submission_validation import validate_submission
 
 file_name = os.path.basename(__file__)
 blueprint = Blueprint(file_name[:-3], __name__)  # blueprint name == filename
@@ -206,6 +211,34 @@ def _log_action(cursor, event_id, action, details):
     )
 
 
+def _publish_edit_version(cursor, event_id, version_id):
+    """Repoint an event's live version to `version_id` and mark it approved,
+    KEEPING the existing slug (an edit doesn't change the URL — plan §7). Shared by
+    the edit-approval path in approve() and the direct admin-edit endpoint. Runs in
+    the caller's transaction; the caller logs the action."""
+    cursor.execute(
+        "UPDATE events SET published_version_id = %s WHERE id = %s",
+        (version_id, event_id),
+    )
+    cursor.execute(
+        "UPDATE event_versions "
+        "SET approval_status = 'approved', reviewed_at = now() "
+        "WHERE id = %s",
+        (version_id,),
+    )
+
+
+def _load_active_taxonomy():
+    """Active taxonomy label sets to validate an admin edit against (plan §7 — the
+    DB is the source of truth). Mirrors scripts/edits.py."""
+    with db_manager.get_cursor(commit=False) as cursor:
+        cursor.execute("SELECT label FROM drink_categories WHERE active = TRUE")
+        categories = {row["label"] for row in cursor.fetchall()}
+        cursor.execute("SELECT label FROM event_formats WHERE active = TRUE")
+        formats = {row["label"] for row in cursor.fetchall()}
+    return categories, formats
+
+
 # ---------------------------------------------------------------------------
 # Approve — capture the authorisation (charge the card), publish the version,
 # email the submitter. Failure state (plan §6): if the capture fails (hold
@@ -249,16 +282,7 @@ def approve():
     if row["published_version_id"] is not None:
         try:
             with db_manager.get_cursor() as cursor:
-                cursor.execute(
-                    "UPDATE events SET published_version_id = %s WHERE id = %s",
-                    (version_id, row["event_id"]),
-                )
-                cursor.execute(
-                    "UPDATE event_versions "
-                    "SET approval_status = 'approved', reviewed_at = now() "
-                    "WHERE id = %s",
-                    (version_id,),
-                )
+                _publish_edit_version(cursor, row["event_id"], version_id)
                 _log_action(
                     cursor,
                     row["event_id"],
@@ -513,6 +537,115 @@ def _row_to_event(row):
     }
 
 
+# ---------------------------------------------------------------------------
+# Admin content edit (post-launch feature) — the admin edits a listing directly,
+# distinct from proposing changes via the messaging thread. Reuses the shared
+# edit-versioning core so history is retained (no in-place mutation of an
+# "immutable" snapshot — plan §7):
+#   • PENDING event  -> a new admin-authored pending version, the authorised hold
+#     moved onto it, the prior pending version superseded. Stays pending; the admin
+#     approves→captures separately. No email (still under review).
+#   • PUBLISHED event -> a new version that goes LIVE immediately (repoint + keep
+#     slug — the admin IS the approval authority, no pending round-trip). The
+#     "we updated your listing" email is sent ONLY when the admin opted in AND the
+#     edit went live (owner rule): notify=true + a non-empty notify_message.
+# ---------------------------------------------------------------------------
+@blueprint.route("/edit", methods=["POST"])
+@admin_required
+def edit():
+    body = request.get_json(silent=True) or {}
+    version_id = body.get("version_id")
+    event_fields = body.get("event") or {}
+    notify = bool(body.get("notify"))
+    notify_message = (body.get("notify_message") or "").strip()
+    if not version_id:
+        return jsonify({"code": 400, "error": "version_id is required."}), 400
+
+    # Re-validate the edited fields server-side against the live taxonomy (plan §7 —
+    # never trust the client), same validators as a fresh submission / submitter edit.
+    try:
+        allowed_categories, allowed_formats = _load_active_taxonomy()
+    except psycopg2.Error:
+        return jsonify({"code": 500, "error": "Database error occurred"}), 500
+
+    cleaned, errors = validate_submission(event_fields, allowed_categories, allowed_formats)
+    if errors:
+        return jsonify({"code": 400, "error": "Validation failed", "errors": errors}), 400
+
+    try:
+        with db_manager.get_cursor() as cursor:
+            row = _load_version_for_action(cursor, version_id)
+            if not row:
+                return jsonify({"code": 404, "error": "Submission not found."}), 404
+
+            is_published_event = row["published_version_id"] is not None
+            # For a not-yet-published event we only edit the version under review.
+            if not is_published_event and row["approval_status"] != "pending_review":
+                return (
+                    jsonify({"code": 409, "error": f"Cannot edit a {row['approval_status']} version."}),
+                    409,
+                )
+
+            new_version_id, was_published = create_edit_version(
+                cursor,
+                row["event_id"],
+                row["published_version_id"],
+                cleaned,
+                supersede_reason="Superseded by an admin edit",
+            )
+
+            # Published event: the admin's edit goes live at once (repoint + keep slug).
+            if was_published:
+                _publish_edit_version(cursor, row["event_id"], new_version_id)
+
+            _log_action(
+                cursor,
+                row["event_id"],
+                "admin_edit",
+                {
+                    "from_version_id": version_id,
+                    "new_version_id": new_version_id,
+                    "was_published": was_published,
+                    "notified": bool(was_published and notify and notify_message),
+                },
+            )
+    except psycopg2.Error:
+        return jsonify({"code": 500, "error": "Could not save the edit. Please retry."}), 500
+
+    # Notify the submitter ONLY for a live edit they were told about (owner rule):
+    # opted in + wrote a note + the edit actually went live. Best-effort, post-commit.
+    notified = False
+    if was_published and notify and notify_message:
+        public_url = f"{_PUBLIC_EVENT_BASE_URL}/{row['slug']}" if row["slug"] else None
+        # Recipient is the event's original submitter (never the form field, which
+        # the admin could have changed); content fields come from the new version.
+        email_event = {
+            "name": cleaned["name"],
+            "start_datetime": cleaned["start_datetime"],
+            "end_datetime": cleaned["end_datetime"],
+            "city": cleaned["city"],
+            "country": cleaned["country"],
+        }
+        send_listing_updated(row["submitter_email"], email_event, notify_message, public_url)
+        notified = True
+
+    return (
+        jsonify(
+            {
+                "code": 200,
+                "data": {
+                    "event_id": row["event_id"],
+                    "new_version_id": new_version_id,
+                    "was_published": was_published,
+                    "status": "published" if was_published else "pending_review",
+                    "notified": notified,
+                },
+            }
+        ),
+        200,
+    )
+
+
 # ===========================================================================
 # Phase 4B — live-listing management, version history, analytics, pricing CRUD.
 # All endpoints are @admin_required (backstage-only); UNPUBLISH is one of the
@@ -554,6 +687,11 @@ def live():
                     pv.image_url,
                     pv.event_format,
                     pv.drink_categories,
+                    -- full content fields so the admin EDIT form prefills completely
+                    pv.description,
+                    pv.link,
+                    pv.contact_email,
+                    pv.submission_type,
                     (pv.end_datetime IS NOT NULL AND pv.end_datetime < now()) AS is_past,
                     (SELECT count(*) FROM event_versions ev2 WHERE ev2.event_id = e.id)
                                          AS version_count,
@@ -927,3 +1065,194 @@ def delete_pricing_tier(tier_id):
     except psycopg2.Error:
         return jsonify({"code": 500, "error": "Could not delete the tier. Please retry."}), 500
     return jsonify({"code": 200, "data": {"id": tier_id, "deleted": True}}), 200
+
+
+# ===========================================================================
+# Messaging — the admin side of the admin⇄submitter conversation thread
+# (post-launch feature). The submitter side is the PUBLIC, token-gated
+# scripts/messages.py. Web-link replies only: the admin's message is emailed with
+# a link to a page on our own site; the submitter never emails us back.
+#
+# FREEZE RULE (owner decision): a conversation is OPEN only while the event is
+# 'pending_review'. Once the event goes live / is withdrawn / otherwise resolves,
+# the thread is read-only — the admin can view it but not post. So POST refuses
+# unless the event is pending_review; GET always works (viewing history).
+# ===========================================================================
+
+
+def _event_message_context(cursor, event_id):
+    """Fetch the event's display name (published version, else latest), submitter,
+    status and slug — the context both message endpoints need. None if no event."""
+    cursor.execute(
+        """
+        SELECT
+            e.id                 AS event_id,
+            e.submitter_email,
+            e.current_status,
+            e.slug,
+            COALESCE(pv.name, lv.name) AS name
+        FROM events e
+        LEFT JOIN event_versions pv ON pv.id = e.published_version_id
+        LEFT JOIN LATERAL (
+            SELECT name FROM event_versions
+            WHERE event_id = e.id
+            ORDER BY version_number DESC, id DESC
+            LIMIT 1
+        ) lv ON TRUE
+        WHERE e.id = %s
+        """,
+        (event_id,),
+    )
+    return cursor.fetchone()
+
+
+def _thread_rows(cursor, event_id):
+    """The full message thread for an event, oldest first."""
+    cursor.execute(
+        "SELECT id, sender, admin_user_id, body, created_at, read_by_admin "
+        "FROM event_messages WHERE event_id = %s ORDER BY created_at ASC, id ASC",
+        (event_id,),
+    )
+    return [dict(r) for r in cursor.fetchall()]
+
+
+# ---------------------------------------------------------------------------
+# Send a message to the submitter. Only allowed while the event is pending_review
+# (the conversation freezes once it resolves). Emails the submitter the message +
+# a magic reply link to the public conversation page.
+# ---------------------------------------------------------------------------
+@blueprint.route("/messages", methods=["POST"])
+@admin_required
+def send_message():
+    body = request.get_json(silent=True) or {}
+    event_id = body.get("event_id")
+    text = (body.get("body") or "").strip()
+    if not event_id or not text:
+        return jsonify({"code": 400, "error": "event_id and a message body are required."}), 400
+
+    try:
+        with db_manager.get_cursor() as cursor:
+            ctx = _event_message_context(cursor, event_id)
+            if not ctx:
+                return jsonify({"code": 404, "error": "Listing not found."}), 404
+            if ctx["current_status"] != "pending_review":
+                return (
+                    jsonify(
+                        {
+                            "code": 409,
+                            "error": "This conversation is closed — the listing is no "
+                            f"longer under review (status: {ctx['current_status']}).",
+                        }
+                    ),
+                    409,
+                )
+
+            cursor.execute(
+                "INSERT INTO event_messages (event_id, sender, admin_user_id, body, "
+                "read_by_admin, email_sent) VALUES (%s, 'admin', %s, %s, TRUE, TRUE) "
+                "RETURNING id",
+                (event_id, g.admin_user_id, text),
+            )
+            message_id = cursor.fetchone()["id"]
+
+            # Fresh reply link (indefinite expiry; the real gate is the event state).
+            raw_token, _ = create_conversation_link(cursor, event_id)
+            _log_action(cursor, event_id, "admin_message", {"message_id": message_id})
+    except psycopg2.Error:
+        return jsonify({"code": 500, "error": "Could not send the message. Please retry."}), 500
+
+    reply_url = f"{_PUBLIC_EVENT_BASE_URL}/conversation?token={raw_token}"
+    send_admin_message(ctx["submitter_email"], {"name": ctx["name"]}, text, reply_url)
+
+    return jsonify({"code": 200, "data": {"event_id": event_id, "message_id": message_id}}), 200
+
+
+# ---------------------------------------------------------------------------
+# Read a thread (any status — viewing a frozen thread is fine) and mark the
+# submitter's messages read so the unread badge clears.
+# ---------------------------------------------------------------------------
+@blueprint.route("/messages", methods=["GET"])
+@admin_required
+def get_thread():
+    event_id = request.args.get("event_id")
+    if not event_id:
+        return jsonify({"code": 400, "error": "event_id is required."}), 400
+
+    try:
+        with db_manager.get_cursor() as cursor:
+            ctx = _event_message_context(cursor, event_id)
+            if not ctx:
+                return jsonify({"code": 404, "error": "Listing not found."}), 404
+            cursor.execute(
+                "UPDATE event_messages SET read_by_admin = TRUE "
+                "WHERE event_id = %s AND sender = 'submitter' AND read_by_admin = FALSE",
+                (event_id,),
+            )
+            messages = _thread_rows(cursor, event_id)
+    except psycopg2.Error:
+        return jsonify({"code": 500, "error": "Database error occurred"}), 500
+
+    return (
+        jsonify(
+            {
+                "code": 200,
+                "data": {
+                    "event": {
+                        "event_id": ctx["event_id"],
+                        "name": ctx["name"],
+                        "submitter_email": ctx["submitter_email"],
+                        "current_status": ctx["current_status"],
+                        "slug": ctx["slug"],
+                    },
+                    "open": ctx["current_status"] == "pending_review",
+                    "messages": messages,
+                },
+            }
+        ),
+        200,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Inbox — events with unread submitter replies, most-recent first. Drives the
+# dashboard's unread badge / Inbox tab.
+# ---------------------------------------------------------------------------
+@blueprint.route("/inbox", methods=["GET"])
+@admin_required
+def inbox():
+    try:
+        with db_manager.get_cursor(commit=False) as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    e.id                 AS event_id,
+                    e.slug,
+                    e.current_status,
+                    e.submitter_email,
+                    COALESCE(pv.name, lv.name) AS name,
+                    count(*) FILTER (
+                        WHERE m.sender = 'submitter' AND m.read_by_admin = FALSE
+                    )                    AS unread,
+                    count(*)             AS total,
+                    max(m.created_at)    AS last_message_at
+                FROM event_messages m
+                JOIN events e ON e.id = m.event_id
+                LEFT JOIN event_versions pv ON pv.id = e.published_version_id
+                LEFT JOIN LATERAL (
+                    SELECT name FROM event_versions
+                    WHERE event_id = e.id
+                    ORDER BY version_number DESC, id DESC
+                    LIMIT 1
+                ) lv ON TRUE
+                GROUP BY e.id, e.slug, e.current_status, e.submitter_email, pv.name, lv.name
+                HAVING count(*) FILTER (
+                    WHERE m.sender = 'submitter' AND m.read_by_admin = FALSE
+                ) > 0
+                ORDER BY max(m.created_at) DESC
+                """
+            )
+            rows = [dict(r) for r in cursor.fetchall()]
+    except psycopg2.Error:
+        return jsonify({"code": 500, "error": "Database error occurred"}), 500
+
+    return jsonify({"code": 200, "data": rows}), 200

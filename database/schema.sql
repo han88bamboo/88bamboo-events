@@ -184,6 +184,25 @@ CREATE TABLE files (
     is_public        BOOLEAN NOT NULL DEFAULT TRUE
 );
 
+-- event_messages — the admin⇄submitter conversation thread for a listing
+-- (post-launch feature). One row per message; the "thread" is every row for an
+-- event, oldest-first. Web-link replies only: the submitter never emails us back,
+-- they reply on a page (magic-link token). A thread is OPEN only while the event
+-- is 'pending_review'; once it goes live / is withdrawn the thread freezes
+-- (enforced in the endpoints, not by a column). read_by_admin drives the admin's
+-- unread badge; email_sent records whether the outbound email fired for an admin
+-- message.
+CREATE TABLE event_messages (
+    id            SERIAL PRIMARY KEY,
+    event_id      INTEGER REFERENCES events(id) ON DELETE SET NULL,
+    sender        VARCHAR(20) NOT NULL CHECK (sender IN ('admin', 'submitter')),
+    admin_user_id INTEGER REFERENCES admin_users(id) ON DELETE SET NULL,  -- set only for sender='admin'
+    body          TEXT NOT NULL,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    read_by_admin BOOLEAN NOT NULL DEFAULT FALSE,   -- a submitter reply starts unread; admin messages are read by definition
+    email_sent    BOOLEAN NOT NULL DEFAULT FALSE     -- whether the notification email was dispatched (admin messages)
+);
+
 -- ---------------------------------------------------------------------------
 -- Indexes — support the documented query patterns.
 -- ---------------------------------------------------------------------------
@@ -194,6 +213,7 @@ CREATE INDEX idx_payments_event_version_id   ON payments (event_version_id);
 CREATE INDEX idx_payments_status_capture     ON payments (status, capture_before);  -- hourly auto-release scan (plan §6)
 CREATE INDEX idx_magic_links_token_hash      ON magic_links (token_hash);           -- edit-link validation
 CREATE INDEX idx_files_event_version_id      ON files (event_version_id);
+CREATE INDEX idx_event_messages_event_id     ON event_messages (event_id, created_at);  -- thread reads + unread scan
 
 -- ===========================================================================
 -- SEED DATA (non-secret). The admin user is seeded separately from env by

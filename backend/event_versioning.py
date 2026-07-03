@@ -37,10 +37,15 @@ def editable_version(cursor, event_id, published_version_id):
     return cursor.fetchone()
 
 
-def create_edit_version(cursor, event_id, published_version_id, cleaned):
+def create_edit_version(cursor, event_id, published_version_id, cleaned,
+                        supersede_reason="Superseded by a newer edit"):
     """Create a new pending_review version from validated `cleaned` fields, handling
     the pre-/post-approval cases above. Runs entirely in the caller's transaction.
-    Returns (new_version_id, is_published)."""
+    Returns (new_version_id, is_published).
+
+    `supersede_reason` is the rejection_reason stamped on the prior pending
+    version(s) in the pre-approval case — defaulted for submitter edits, overridden
+    to "Superseded by an admin edit" when the admin edits from the dashboard."""
     is_published = published_version_id is not None
 
     # Carry the prior version's image forward (no image re-upload on edit at MVP).
@@ -98,9 +103,9 @@ def create_edit_version(cursor, event_id, published_version_id, cleaned):
         cursor.execute(
             "UPDATE event_versions "
             "SET approval_status = 'rejected', "
-            "    rejection_reason = 'Superseded by a newer edit' "
+            "    rejection_reason = %s "
             "WHERE event_id = %s AND id <> %s AND approval_status = 'pending_review'",
-            (event_id, new_version_id),
+            (supersede_reason, event_id, new_version_id),
         )
 
     return new_version_id, is_published

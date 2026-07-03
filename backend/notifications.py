@@ -326,6 +326,64 @@ def send_edit_approved(recipient, event, public_url=None):
     return send_email(subject, recipient, body)
 
 
+def send_admin_message(recipient, event, message_body, reply_url):
+    """Admin→submitter message in the review conversation (post-launch messaging).
+    The submitter does NOT reply to this email — they click the link to a page on
+    our own site and reply there (owner decision: web-link replies only, no inbound
+    email). The link carries a magic token; the thread stays open while the event
+    is under review."""
+    subject = f"A message about your event listing: {event.get('name')}"
+    body = (
+        f"Hi,\n\n"
+        f"We're reviewing your event listing and have a message for you:\n\n"
+        f"    {message_body}\n\n"
+        f"Please reply on this page (you don't reply to this email — just open the "
+        f"link and type your response):\n\n"
+        f"{reply_url}\n\n"
+        f"Event: {event.get('name')}\n\n"
+        f"— 88 Bamboo Events"
+    )
+    return send_email(subject, recipient, body)
+
+
+def send_reply_admin(recipient, event, message_body):
+    """Submitter→admin notification that a reply arrived in a review conversation
+    (post-launch messaging). Points the admin back to the dashboard, where the
+    full thread lives; the reply body is included for convenience."""
+    subject = f"New reply from a submitter: {event.get('name')}"
+    body = (
+        f"A submitter replied in the review conversation.\n\n"
+        f"Event:     {event.get('name')}\n"
+        f"Submitter: {event.get('submitter_email')}\n\n"
+        f"    {message_body}\n\n"
+        f"Open the admin dashboard (Inbox) to read the full thread and respond.\n"
+        f"— 88 Bamboo Events"
+    )
+    return send_email(subject, recipient, body)
+
+
+def send_listing_updated(recipient, event, change_note, public_url=None):
+    """Submitter notification that WE edited their live listing (post-launch admin
+    edit). Sent ONLY when the admin opted in (ticked "inform them" + wrote a note)
+    AND the edit went live (owner rule) — so `change_note` is always present. One-
+    way: there is no reply link, because a live listing's conversation is frozen."""
+    url_line = f"\nYour listing: {public_url}\n" if public_url else ""
+    subject = f"We updated your event listing: {event.get('name')}"
+    body = (
+        f"Hi,\n\n"
+        f"Our team made a small update to your live event listing. Here's what "
+        f"changed:\n\n"
+        f"    {change_note}\n"
+        f"{url_line}\n"
+        f"Event: {event.get('name')}\n"
+        f"When:  {event.get('start_datetime')} — {event.get('end_datetime')}\n"
+        f"Where: {event.get('city')}, {event.get('country')}\n\n"
+        f"If anything looks wrong, just reply to let us know.\n"
+        f"— 88 Bamboo Events"
+    )
+    return send_email(subject, recipient, body)
+
+
 def send_repay_required(recipient, event, amount, currency):
     """Submitter email for the approve-but-capture-fails state (plan §6). The
     admin approved, but the authorisation could no longer be captured (the hold
