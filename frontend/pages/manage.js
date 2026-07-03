@@ -1,7 +1,7 @@
 // pages/manage.js — /a/events/manage. Where an organiser requests a magic edit
 // link for their listing (plan §7). They enter the listing slug (prefilled from
 // the detail page's "Request an edit link") + the submitter email; the backend
-// emails a 30-minute link if — and only if — the pair matches. The response is
+// emails a 24-hour link if — and only if — the pair matches. The response is
 // always generic (anti-enumeration), so the UI never confirms whether an email
 // is on file.
 import Head from 'next/head';
@@ -44,7 +44,7 @@ function ManageView({ initialSlug }) {
           <h4 className="alert-heading">Check your email</h4>
           <p className="mb-0">
             If that listing and email match, we&apos;ve sent an edit link. It
-            expires in 30 minutes. Didn&apos;t get it? Check the address and try
+            expires in 24 hours. Didn&apos;t get it? Check the address and try
             again.
           </p>
         </div>

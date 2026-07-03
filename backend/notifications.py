@@ -15,7 +15,7 @@
 #   - admin     "pending digest" (once-a-day summary of the review queue)
 #   - admin     "expiry alert"   (send-once 48h / 24h before an authorisation lapses)
 # Phase-5 emails (magic-link editing — plan §7/§8):
-#   - submitter "magic link"     (one-time 30-min edit link, URL token)
+#   - submitter "magic link"     (one-time 24-hour edit link, URL token)
 #   - submitter "edit received"  (changes under review; edits are free)
 #   - admin     "edit awaiting"  (an edit is queued for review)
 #   - submitter "edit approved"  (the update is live; slug unchanged)
@@ -42,10 +42,10 @@ def send_under_review(recipient, event, amount, currency, edit_url=None):
     pre-approval magic edit link (plan §7) — how a still-pending submitter (whose
     listing has no public slug yet) can amend it while it's in the queue."""
     fee = _format_fee(amount, currency)
-    # 30-min expiry matches the magic_links default; state it so the link's short
+    # 24-hour expiry matches the magic_links default; state it so the link's
     # life isn't a surprise.
     edit_line = (
-        f"\nSpotted a mistake? You can edit your submission within 30 minutes "
+        f"\nSpotted a mistake? You can edit your submission within 24 hours "
         f"here:\n{edit_url}\n"
         if edit_url
         else ""
@@ -227,14 +227,14 @@ def send_expiry_alert(recipient, event, capture_before, threshold_label):
 
 def send_magic_link(recipient, slug, edit_url):
     """Submitter's edit magic-link email (plan §7/§8). Carries the one-time,
-    30-minute URL token as a plain link — no cookie, no password. The token is in
+    24-hour URL token as a plain link — no cookie, no password. The token is in
     the URL because editing may run through the App Proxy (which strips cookies)."""
     subject = "Your edit link for your 88 Bamboo event listing"
     body = (
         f"Hi,\n\n"
         f"You (or someone using your email) asked to edit your event listing "
-        f"'{slug}'. Use the link below to make changes — it expires in 30 "
-        f"minutes and is for you alone:\n\n"
+        f"'{slug}'. Use the link below to make changes — it expires in 24 "
+        f"hours and is for you alone:\n\n"
         f"{edit_url}\n\n"
         f"Any changes you submit are reviewed before they go live. If you didn't "
         f"request this, you can safely ignore this email — nothing changes.\n"

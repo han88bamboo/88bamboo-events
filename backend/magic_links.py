@@ -2,16 +2,17 @@
 # an edit session is carried entirely by a URL token, because magic-link editing
 # may run through the Shopify App Proxy, which strips cookies (plan §4/§7).
 #
-# Security shape (plan §7):
+# Security shape (plan §7, TTL widened from the original 30-min spec value —
+# see DEFAULT_TTL_MINUTES below):
 #   - a random, high-entropy token is emailed to the submitter;
 #   - only its SHA-256 HASH is stored (magic_links.token_hash), never the raw
 #     token, so a DB leak cannot be replayed as a live link;
-#   - 30-minute expiry;
+#   - 24-hour expiry;
 #   - "single-use but tolerate ~3 uses": email-security scanners pre-click links
 #     (GET), which would burn a strictly single-use token before the human ever
 #     opens it. We therefore gate on EXPIRY, not on a hard first-use lock —
 #     validation succeeds for any not-yet-expired token, and `used_at` is stamped
-#     for audit on the first successful edit. Within the 30-minute window a link
+#     for audit on the first successful edit. Within the 24-hour window a link
 #     tolerates the handful of scanner/human hits this is meant to survive.
 #
 # Pure-ish helpers: token generation/hashing are DB-free (unit-testable); the
@@ -24,7 +25,7 @@ from datetime import datetime, timedelta, timezone
 
 # 32 bytes -> a 43-char URL-safe token. Ample entropy against guessing.
 _TOKEN_BYTES = 32
-DEFAULT_TTL_MINUTES = 30
+DEFAULT_TTL_MINUTES = 60 * 24  # 24 hours (was 30 minutes at Phase-5 launch)
 
 
 def generate_token():

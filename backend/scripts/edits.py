@@ -1,6 +1,6 @@
 # scripts/edits.py — magic-link event editing (plan §7). Prefix /edits.
 #
-#   POST /edits/request-link   email the submitter a fresh 30-min magic link
+#   POST /edits/request-link   email the submitter a fresh 24-hour magic link
 #   GET  /edits/context        resolve a token -> the current editable content
 #   POST /edits/submit         apply an edit -> a NEW pending_review version
 #

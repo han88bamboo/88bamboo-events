@@ -353,7 +353,7 @@ def create_intent():
             # event has no public slug, so the manage page can't reach it; the
             # link in the under-review email is how they self-serve an edit. The
             # hash is stored in this same transaction; the raw token is emailed
-            # below. 30-min expiry (magic_links default).
+            # below. 24-hour expiry (magic_links default).
             edit_token, _ = create_magic_link(cursor, event_id)
 
             # Read the admin recipient inside the same connection (used after

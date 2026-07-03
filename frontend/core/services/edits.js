@@ -5,7 +5,7 @@
 import { apiClient } from '@/core/config/api';
 
 export const editsService = {
-  // Ask the backend to email a fresh 30-min edit link. Always resolves to a
+  // Ask the backend to email a fresh 24-hour edit link. Always resolves to a
   // generic success (anti-enumeration is enforced server-side).
   async requestLink(slug, email) {
     return apiClient.post('/edits/request-link', { slug, email });
