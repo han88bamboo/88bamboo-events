@@ -45,7 +45,13 @@ locals {
     { name = "STRIPE_WEBHOOK_SECRET", value = var.stripe_webhook_secret },
 
     { name = "SHOPIFY_SHARED_SECRET", value = var.shopify_shared_secret },
-    { name = "SHOPIFY_PROXY_VERIFY", value = "true" },
+    # MUST stay "false": the API is called DIRECTLY cross-origin (admin dashboard,
+    # submission form, widget, Vercel SSR) and by Stripe's webhook — none of which
+    # carry a Shopify App Proxy signature. Only the FRONTEND (events.88bamboo.co on
+    # Vercel) sits behind the proxy and verifies signatures. Setting this "true"
+    # here makes shopify_proxy.py's before_request 401 every non-/health request
+    # (incl. the CORS OPTIONS preflight), breaking admin login and all API reads.
+    { name = "SHOPIFY_PROXY_VERIFY", value = "false" },
 
     { name = "ADMIN_SESSION_SECRET", value = var.admin_session_secret },
     { name = "PUBLIC_EVENT_BASE_URL", value = var.public_event_base_url },
