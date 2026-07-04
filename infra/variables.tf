@@ -115,8 +115,8 @@ variable "manage_rds_ingress_rule" {
     false — add it by hand instead (network.tf explains why: inline-vs-standalone
     rule conflicts with Drink-X's own Terraform).
   EOT
-  type    = bool
-  default = false
+  type        = bool
+  default     = false
 }
 
 # ---------------------------------------------------------------------------

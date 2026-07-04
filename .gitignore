@@ -23,3 +23,6 @@ npm-debug.log*
 
 # --- Misc ---
 .DS_Store
+
+# Build-handoff scratch file written by scripts/docker-build.sh
+scripts/.last-build-tag

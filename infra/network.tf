@@ -10,7 +10,7 @@
 # IP + IGW, no NAT) and drinkxprod.
 resource "aws_security_group" "task" {
   name        = "events-task-sg"
-  description = "events-api Fargate task — in from the Drink-X ALB SG only, all out"
+  description = "events-api Fargate task - in from the Drink-X ALB SG only, all out"
   vpc_id      = var.vpc_id
 
   ingress {
