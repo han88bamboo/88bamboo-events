@@ -6,17 +6,18 @@
  * renders responsive branded cards that deep-link to the apex listing pages.
  *
  * Because it runs inside the Shopify theme (a different origin from the API), it
- * relies on the API's CORS allowing https://www.88bamboo.co — which app.py grants
- * in production. The feed endpoint is unguarded and cookie-free by design.
+ * relies on the API's CORS allowing https://88bamboo.co (the store's canonical
+ * naked apex) — which app.py grants in production. The feed endpoint is unguarded
+ * and cookie-free by design.
  *
  * EMBED SNIPPET (paste into a Shopify section/page; see widget/README.md):
  *
  *   <div id="bamboo-events-widget"
  *        data-api="https://events-api.88bamboo.co"
- *        data-site="https://www.88bamboo.co"
+ *        data-site="https://88bamboo.co"
  *        data-limit="6"
  *        data-title="Upcoming events"></div>
- *   <script src="https://events.88bamboo.co/a/events/widget/events-widget.js" defer></script>
+ *   <script src="https://88bamboo.co/a/events/widget/events-widget.js" defer></script>
  *
  * All data-* attributes are optional and fall back to the production defaults
  * below.
@@ -26,7 +27,7 @@
 
   var MOUNT_ID = 'bamboo-events-widget';
   var DEFAULT_API = 'https://events-api.88bamboo.co';
-  var DEFAULT_SITE = 'https://www.88bamboo.co';
+  var DEFAULT_SITE = 'https://88bamboo.co';
   var BASE_PATH = '/a/events';
 
   function h(tag, attrs, children) {

@@ -7,14 +7,17 @@ pages on the apex domain.
 
 ## What it is
 
-- **One file:** `events-widget.js` (this folder). Served by Vercel at
-  `https://events.88bamboo.co/a/events/widget/events-widget.js` (the app's
-  `basePath` is `/a/events`, and files in `public/` are served under it).
+- **One file:** `events-widget.js` (this folder). Served under the app's
+  `basePath` (`/a/events`, and files in `public/` are served under it) at
+  `https://88bamboo.co/a/events/widget/events-widget.js` — same-origin with the
+  storefront, through the Shopify App Proxy. (Vercel also serves the identical
+  file directly at `https://events.88bamboo.co/a/events/widget/events-widget.js`
+  if you ever want to bypass the proxy for the script itself.)
 - **Not part of Next.js routing.** It is plain vanilla JS the browser runs
   inside the Shopify theme — no React, no iframe, no build step.
 - **Data source:** `GET https://events-api.88bamboo.co/events/widget` — an
   unguarded, cookie-free, CORS-open endpoint (backend `scripts/events.py`). CORS
-  in production allows `https://www.88bamboo.co`.
+  in production allows `https://88bamboo.co` (the store's canonical naked apex).
 
 ## Paste-in snippet (Shopify theme)
 
@@ -23,10 +26,10 @@ Add a **Custom Liquid** section (or edit a template) and paste:
 ```html
 <div id="bamboo-events-widget"
      data-api="https://events-api.88bamboo.co"
-     data-site="https://www.88bamboo.co"
+     data-site="https://88bamboo.co"
      data-limit="6"
      data-title="Upcoming events"></div>
-<script src="https://events.88bamboo.co/a/events/widget/events-widget.js" defer></script>
+<script src="https://88bamboo.co/a/events/widget/events-widget.js" defer></script>
 ```
 
 All `data-*` attributes are **optional** and fall back to the production
@@ -35,7 +38,7 @@ defaults baked into the script:
 | Attribute    | Default                             | Meaning                                        |
 |--------------|-------------------------------------|------------------------------------------------|
 | `data-api`   | `https://events-api.88bamboo.co`    | Public events API origin (the feed source).    |
-| `data-site`  | `https://www.88bamboo.co`           | Apex site; card links become `…/a/events/<slug>`. |
+| `data-site`  | `https://88bamboo.co`               | Apex site; card links become `…/a/events/<slug>`. |
 | `data-limit` | `6`                                 | Max cards to show (backend caps at 24).        |
 | `data-title` | *(none)*                            | Optional heading above the grid.               |
 

@@ -1,22 +1,13 @@
 // pages/admin/login.js — /a/events/admin/login. Backstage login page (plan §5.3).
 //
-// Opened DIRECTLY at the backstage origin (locally http://localhost:8080/a/events/
-// admin/login), NOT through the Shopify proxy — the proxy strips cookies and the
-// admin session needs them (plan §4). So there is NO verifyProxyRequest here.
-//
-// SSR guard (mirrors §A6): if the admin session cookie is already present, skip
-// the login form and go straight to the dashboard.
+// Reachable BOTH ways: directly at the backstage origin (events.88bamboo.co /
+// localhost:8080) AND through the Shopify proxy on the apex
+// (88bamboo.co/a/events/admin/login). The proxy STRIPS cookies (plan §4), so
+// there is no SSR cookie guard here — the "already signed in, skip the form"
+// redirect is done CLIENT-SIDE from the localStorage token (in AdminLogin).
 import Head from 'next/head';
 
 import AdminLogin from '@/components/views/admin/AdminLogin';
-import { hasAdminCookie } from '@/core/utils/adminCookie';
-
-export function getServerSideProps(ctx) {
-  if (hasAdminCookie(ctx.req)) {
-    return { redirect: { destination: '/admin', permanent: false } };
-  }
-  return { props: {} };
-}
 
 function AdminLoginPage() {
   return (

@@ -2,7 +2,7 @@
 // Self-contained view. The password is hashed in the browser (adminAuth) and
 // string-compared server-side against admin_users.password_hash; on success the
 // backend returns a signed session token we persist (cookie + localStorage).
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 
 import { adminService } from '@/core/services/admin';
@@ -14,6 +14,13 @@ function AdminLogin() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+
+  // Client-side "already signed in" redirect. Replaces the old SSR cookie guard
+  // (removed because the Shopify proxy strips cookies — plan §4): if a session
+  // token is already in localStorage, skip the form and go to the dashboard.
+  useEffect(() => {
+    if (adminAuth.getToken()) router.replace('/admin');
+  }, [router]);
 
   const onSubmit = async (e) => {
     e.preventDefault();

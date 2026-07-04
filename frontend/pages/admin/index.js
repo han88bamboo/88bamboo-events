@@ -1,23 +1,17 @@
 // pages/admin/index.js — /a/events/admin. The backstage review dashboard (plan §6).
 //
-// Opened DIRECTLY at the backstage origin (locally http://localhost:8080/a/events/
-// admin), NOT through the Shopify proxy (the proxy strips cookies; the admin
-// session needs them — plan §4). So there is NO verifyProxyRequest here.
-//
-// SSR guard (mirrors §A6): no admin session cookie -> redirect to the login page.
-// The cookie only gates PAGE access; the API actions are additionally verified
-// server-side (plan §5.3 carve-out) — the cookie alone can't move money.
+// Reachable BOTH ways: directly at the backstage origin (events.88bamboo.co /
+// localhost:8080) AND through the Shopify proxy on the apex
+// (88bamboo.co/a/events/admin). Because the proxy STRIPS cookies (plan §4), the
+// page cannot rely on an SSR cookie guard — through the proxy the cookie never
+// survives, so an SSR guard would loop back to /admin/login forever. Instead the
+// session is gated CLIENT-SIDE from the localStorage token (AdminDashboard's
+// mount effect redirects to /admin/login when there is no token). Real security
+// is unchanged: every money/listing API action is still verified server-side by
+// the Bearer token (plan §5.3 carve-out) — the client guard is only page UX.
 import Head from 'next/head';
 
 import AdminDashboard from '@/components/views/admin/AdminDashboard';
-import { hasAdminCookie } from '@/core/utils/adminCookie';
-
-export function getServerSideProps(ctx) {
-  if (!hasAdminCookie(ctx.req)) {
-    return { redirect: { destination: '/admin/login', permanent: false } };
-  }
-  return { props: {} };
-}
 
 function AdminDashboardPage() {
   return (
