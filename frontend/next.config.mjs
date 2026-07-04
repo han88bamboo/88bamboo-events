@@ -13,6 +13,16 @@ const nextConfig = {
   // Serve the whole app under the App Proxy subpath.
   basePath: '/a/events',
 
+  // Shopify App Proxy appends a trailing slash to the proxy-ROOT request only:
+  // a visit to www.88bamboo.co/a/events reaches this app as '/a/events/' (subpaths
+  // like '/a/events/submit' are forwarded verbatim, no added slash). With Next's
+  // default trailing-slash handling that '/a/events/' 308-redirects to '/a/events',
+  // which Shopify re-proxies back to '/a/events/' — an infinite redirect loop that
+  // makes the public listing page unreachable. Skipping the auto-redirect lets the
+  // index page serve '/a/events/' directly. (Do NOT use trailingSlash:true instead —
+  // that would force redirects on the verbatim subpaths and break them.)
+  skipTrailingSlashRedirect: true,
+
   images: {
     // next/image only loads from this allowlist. Add the events image bucket
     // host(s) — the public S3 bucket is created in Phase 7, so both regional
