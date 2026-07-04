@@ -130,6 +130,11 @@ if os.getenv("PURPOSE") == "production":
     CORS(
         app,
         origins=[
+            # The store's canonical host is the NAKED apex (Shopify 301s www→naked,
+            # plan §9 Phase-9 Option B), so the public pages AND the homepage widget
+            # run on this origin — it MUST be allowed or every browser-side call
+            # (submission create-intent, image upload, widget feed) is CORS-blocked.
+            "https://88bamboo.co",
             "https://www.88bamboo.co",
             "https://events.88bamboo.co",
         ],

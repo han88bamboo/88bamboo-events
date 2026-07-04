@@ -16,11 +16,22 @@ export async function getServerSideProps(ctx) {
   const { valid } = verifyProxyRequest(ctx);
   if (!valid) return { notFound: true };
 
+  // Fetch the taxonomy SSR, retrying a few times: a single transient API blip
+  // must not render an empty form (the SubmitEvent view also self-heals client-
+  // side, but retrying here keeps the first paint correct). An empty result is
+  // treated as a miss worth retrying.
   let taxonomy = { drink_categories: [], event_formats: [] };
-  try {
-    taxonomy = await submissionsService.getTaxonomy();
-  } catch {
-    // Leave the selects empty if the API is unreachable; the page still renders.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const t = await submissionsService.getTaxonomy();
+      if (t && (t.event_formats?.length || t.drink_categories?.length)) {
+        taxonomy = t;
+        break;
+      }
+    } catch {
+      // fall through to the retry/backoff below
+    }
+    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 250));
   }
 
   // Re-submit flow (plan §7): an archived/withdrawn listing links here with

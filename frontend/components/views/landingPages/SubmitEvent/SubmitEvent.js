@@ -6,7 +6,7 @@
 // the returned "held" payload. Payment (Stripe Elements) is wired in 3b, so the
 // button here reads "Continue" and the success panel stands in for the checkout
 // step that will consume this payload next round.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { submissionsService } from '@/core/services/submissions';
 import CheckoutStep from './CheckoutStep';
@@ -57,8 +57,30 @@ function initialFields(prefill) {
 }
 
 function SubmitEvent({ taxonomy, prefill }) {
-  const drinkCategories = taxonomy?.drink_categories || [];
-  const eventFormats = taxonomy?.event_formats || [];
+  // Taxonomy normally arrives from SSR props. Keep it in state with a client-side
+  // fallback: if SSR came back empty (a transient API blip), re-fetch it in the
+  // browser so the form self-heals instead of showing empty selects (plan §7).
+  const [tax, setTax] = useState(taxonomy);
+  const drinkCategories = tax?.drink_categories || [];
+  const eventFormats = tax?.event_formats || [];
+
+  useEffect(() => {
+    if (eventFormats.length || drinkCategories.length) return undefined;
+    let cancelled = false;
+    submissionsService
+      .getTaxonomy()
+      .then((t) => {
+        if (!cancelled && t && (t.event_formats?.length || t.drink_categories?.length)) {
+          setTax(t);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // Run once on mount as a fallback; SSR props are the primary source.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [fields, setFields] = useState(() => initialFields(prefill));
   const [selectedCategories, setSelectedCategories] = useState(prefill?.drink_categories || []);
