@@ -110,7 +110,7 @@ function AdminEditModal({ token, item, isLive, onClose, onSaved }) {
           ? `Saved — the listing is updated and live${notified ? ' (submitter notified).' : '.'}`
           : 'Saved — the edited version is now pending your approval.'}
       </div>
-      <button type="button" className="btn btn-success" onClick={onSaved}>
+      <button type="button" className="btn bamboo-btn" onClick={onSaved}>
         Done
       </button>
     </div>

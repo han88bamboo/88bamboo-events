@@ -109,10 +109,10 @@ function MyEvents({ token, email, events = [] }) {
   return (
     <main className="container py-5">
       <div className="d-flex flex-wrap justify-content-between align-items-center mb-2 gap-2">
-        <h1 className="tw-text-custom-green mb-0" style={{ fontFamily: 'Sora, sans-serif' }}>
+        <h1 className="tw-text-bamboo-slate mb-0" style={{ fontFamily: 'Buenard, Georgia, "Times New Roman", serif' }}>
           Your listings
         </h1>
-        <Link href="/submit" className="btn btn-success">List a new event</Link>
+        <Link href="/submit" className="btn bamboo-btn">List a new event</Link>
       </div>
       <p className="text-muted">Signed in as {email}. Click a listing to manage it.</p>
 
@@ -121,8 +121,8 @@ function MyEvents({ token, email, events = [] }) {
           {events.length} listing{events.length === 1 ? '' : 's'}
         </span>
         <div className="btn-group" role="group" aria-label="View mode">
-          <button type="button" className={`btn btn-sm ${view === 'grid' ? 'btn-success' : 'btn-outline-success'}`} onClick={() => setView('grid')}>Grid</button>
-          <button type="button" className={`btn btn-sm ${view === 'list' ? 'btn-success' : 'btn-outline-success'}`} onClick={() => setView('list')}>List</button>
+          <button type="button" className={`btn btn-sm ${view === 'grid' ? 'bamboo-btn' : 'bamboo-btn bamboo-btn--secondary'}`} onClick={() => setView('grid')}>Grid</button>
+          <button type="button" className={`btn btn-sm ${view === 'list' ? 'bamboo-btn' : 'bamboo-btn bamboo-btn--secondary'}`} onClick={() => setView('list')}>List</button>
         </div>
       </div>
 

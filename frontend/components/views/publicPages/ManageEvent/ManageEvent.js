@@ -97,7 +97,7 @@ function MessagesPanel({ variant, token, eventId, data, onReplied }) {
             onChange={(e) => setBody(e.target.value)}
             placeholder="Type your response to 88 Bamboo…"
           />
-          <button type="submit" className="btn btn-success" disabled={sending || !body.trim()}>
+          <button type="submit" className="btn bamboo-btn" disabled={sending || !body.trim()}>
             {sending ? 'Sending…' : 'Send reply'}
           </button>
         </form>
@@ -276,7 +276,7 @@ function ManageEvent({ token, eventId, data, taxonomy }) {
             )}
           </div>
 
-          <h1 className="tw-text-custom-green" style={{ fontFamily: 'Sora, sans-serif' }}>{ev.name}</h1>
+          <h1 className="tw-text-bamboo-slate" style={{ fontFamily: 'Buenard, Georgia, "Times New Roman", serif' }}>{ev.name}</h1>
 
           {ev.image_url && (
             <img src={ev.image_url} alt={ev.name} className="img-fluid rounded my-3 w-100" style={{ maxHeight: 340, objectFit: 'cover' }} />
@@ -315,14 +315,14 @@ function ManageEvent({ token, eventId, data, taxonomy }) {
             <div className="d-flex flex-wrap gap-2">
               {status === 'pending_review' && (
                 <>
-                  <button className="btn btn-success" onClick={() => setMode('edit')}>Edit</button>
+                  <button className="btn bamboo-btn" onClick={() => setMode('edit')}>Edit</button>
                   <button className="btn btn-outline-danger" onClick={() => setConfirm('withdraw')}>Withdraw</button>
                 </>
               )}
 
               {status === 'published' && (
                 <>
-                  <button className="btn btn-success" onClick={() => setMode('edit')}>Edit</button>
+                  <button className="btn bamboo-btn" onClick={() => setMode('edit')}>Edit</button>
                   {data.slug && (
                     <Link href={`/${data.slug}`} className="btn btn-outline-secondary">View public page</Link>
                   )}
@@ -331,7 +331,7 @@ function ManageEvent({ token, eventId, data, taxonomy }) {
               )}
 
               {status === 'unpublished' && data.can_republish && (
-                <button className="btn btn-success" disabled={busy} onClick={() => runAction('republish')}>
+                <button className="btn bamboo-btn" disabled={busy} onClick={() => runAction('republish')}>
                   {busy ? 'Working…' : 'Re-publish'}
                 </button>
               )}
@@ -344,7 +344,7 @@ function ManageEvent({ token, eventId, data, taxonomy }) {
               )}
 
               {['withdrawn', 'rejected', 'expired'].includes(status) && (
-                <Link href={resubmitHref} className="btn btn-success">Re-submit this event</Link>
+                <Link href={resubmitHref} className="btn bamboo-btn">Re-submit this event</Link>
               )}
             </div>
           )}

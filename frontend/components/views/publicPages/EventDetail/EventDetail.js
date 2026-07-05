@@ -18,7 +18,7 @@ function EventDetail({ event }) {
     .join(', ');
 
   return (
-    <main className="container py-5" style={{ maxWidth: 860 }}>
+    <main className="article-measure py-5">
       <p className="mb-3">
         <Link href="/" className="text-decoration-none">&larr; All events</Link>
       </p>
@@ -29,27 +29,24 @@ function EventDetail({ event }) {
         </div>
       )}
 
-      <h1 className="tw-text-custom-green" style={{ fontFamily: 'Sora, sans-serif' }}>
-        {event.name}
-      </h1>
+      {/* Article-like title: Buenard ~32px desktop / ~26px mobile (Decision 2). */}
+      <h1 className="article-title mb-3">{event.name}</h1>
 
       <div className="d-flex flex-wrap gap-1 mb-3">
-        {event.event_format && (
-          <span className="badge bg-success-subtle text-success-emphasis">
-            {event.event_format}
-          </span>
-        )}
+        {event.event_format && <span className="badge-bamboo">{event.event_format}</span>}
         {categories.map((c) => (
-          <span key={c} className="badge bg-light text-dark">{c}</span>
+          <span key={c} className="badge-bamboo badge-bamboo--muted">{c}</span>
         ))}
       </div>
 
       {event.image_url && (
+        // Centered featured image, capped like the storefront article treatment
+        // (reference §12) rather than a full-bleed banner.
         <img
           src={event.image_url}
           alt={event.name}
-          className="img-fluid rounded mb-4 w-100"
-          style={{ maxHeight: 420, objectFit: 'cover' }}
+          className="img-fluid rounded mb-4 d-block mx-auto"
+          style={{ maxWidth: 600, width: '100%', objectFit: 'cover' }}
         />
       )}
 
@@ -77,7 +74,7 @@ function EventDetail({ event }) {
       </dl>
 
       {event.description && (
-        <div className="mb-4" style={{ whiteSpace: 'pre-wrap' }}>
+        <div className="bamboo-prose mb-4" style={{ whiteSpace: 'pre-wrap' }}>
           {event.description}
         </div>
       )}
@@ -88,7 +85,7 @@ function EventDetail({ event }) {
             href={event.link}
             target="_blank"
             rel="noopener noreferrer nofollow"
-            className="btn btn-outline-success"
+            className="btn bamboo-btn bamboo-btn--secondary"
           >
             Visit event website
           </a>

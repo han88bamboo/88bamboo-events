@@ -92,7 +92,7 @@ function ConversationPanel({ token, eventId, eventName, onClose, onChanged }) {
                         onChange={(e) => setBody(e.target.value)}
                         placeholder="e.g. We'd like to shorten the title to “…”. Is that OK?"
                       />
-                      <button type="submit" className="btn btn-success btn-sm" disabled={sending || !body.trim()}>
+                      <button type="submit" className="btn bamboo-btn btn-sm" disabled={sending || !body.trim()}>
                         {sending ? 'Sending…' : 'Send message'}
                       </button>
                     </form>

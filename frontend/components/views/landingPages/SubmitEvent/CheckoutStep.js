@@ -102,7 +102,7 @@ function PayForm({ held, onPaid }) {
           Test card: 4242 4242 4242 4242, any future date, any CVC.
         </div>
       </div>
-      <button type="submit" className="btn btn-success" disabled={!stripe || busy}>
+      <button type="submit" className="btn bamboo-btn" disabled={!stripe || busy}>
         {busy ? 'Authorising…' : 'Place a temporary hold & submit'}
       </button>
     </form>

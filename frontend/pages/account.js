@@ -54,7 +54,7 @@ function AccountView() {
 
   return (
     <main className="container py-5" style={{ maxWidth: 620 }}>
-      <h1 className="tw-text-custom-green mb-3" style={{ fontFamily: 'Sora, sans-serif' }}>
+      <h1 className="tw-text-bamboo-slate mb-3" style={{ fontFamily: 'Buenard, Georgia, "Times New Roman", serif' }}>
         Manage your listings
       </h1>
       <p className="text-muted">
@@ -73,7 +73,7 @@ function AccountView() {
             required
           />
         </div>
-        <button type="submit" className="btn btn-success" disabled={submitting}>
+        <button type="submit" className="btn bamboo-btn" disabled={submitting}>
           {submitting ? 'Sending…' : 'Email me a manage link'}
         </button>
       </form>

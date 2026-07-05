@@ -51,7 +51,7 @@ function Conversation({ token, initial }) {
 
   return (
     <main className="container py-5" style={{ maxWidth: 680 }}>
-      <h1 className="tw-text-custom-green mb-1" style={{ fontFamily: 'Sora, sans-serif' }}>
+      <h1 className="tw-text-bamboo-slate mb-1" style={{ fontFamily: 'Buenard, Georgia, "Times New Roman", serif' }}>
         Conversation about your listing
       </h1>
       <p className="text-muted">
@@ -75,7 +75,7 @@ function Conversation({ token, initial }) {
             onChange={(e) => setBody(e.target.value)}
             placeholder="Type your response to 88 Bamboo…"
           />
-          <button type="submit" className="btn btn-success" disabled={sending || !body.trim()}>
+          <button type="submit" className="btn bamboo-btn" disabled={sending || !body.trim()}>
             {sending ? 'Sending…' : 'Send reply'}
           </button>
         </form>

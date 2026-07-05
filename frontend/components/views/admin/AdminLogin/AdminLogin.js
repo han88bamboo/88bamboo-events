@@ -52,7 +52,7 @@ function AdminLogin() {
 
   return (
     <main className="container py-5" style={{ maxWidth: 420 }}>
-      <h1 className="tw-text-custom-green mb-4" style={{ fontFamily: 'Sora, sans-serif' }}>
+      <h1 className="tw-text-bamboo-slate mb-4" style={{ fontFamily: 'Buenard, Georgia, "Times New Roman", serif' }}>
         Admin sign in
       </h1>
 
@@ -91,7 +91,7 @@ function AdminLogin() {
             required
           />
         </div>
-        <button type="submit" className="btn btn-success w-100" disabled={busy}>
+        <button type="submit" className="btn bamboo-btn w-100" disabled={busy}>
           {busy ? 'Signing in…' : 'Sign in'}
         </button>
       </form>

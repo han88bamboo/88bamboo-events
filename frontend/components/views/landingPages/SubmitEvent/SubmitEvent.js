@@ -198,7 +198,7 @@ function SubmitEvent({ taxonomy, prefill }) {
   if (result) {
     return (
       <main className="container py-5" style={{ maxWidth: 720 }}>
-        <h1 className="tw-text-custom-green mb-3" style={{ fontFamily: 'Sora, sans-serif' }}>
+        <h1 className="tw-text-bamboo-slate mb-3" style={{ fontFamily: 'Buenard, Georgia, "Times New Roman", serif' }}>
           Confirm &amp; pay
         </h1>
         {result.image?.url && (
@@ -226,7 +226,7 @@ function SubmitEvent({ taxonomy, prefill }) {
 
   return (
     <main className="container py-5" style={{ maxWidth: 720 }}>
-      <h1 className="tw-text-custom-green mb-1" style={{ fontFamily: 'Sora, sans-serif' }}>
+      <h1 className="tw-text-bamboo-slate mb-1" style={{ fontFamily: 'Buenard, Georgia, "Times New Roman", serif' }}>
         List an event
       </h1>
       <p className="text-muted">
@@ -492,7 +492,7 @@ function SubmitEvent({ taxonomy, prefill }) {
           <div className="form-text">JPEG, PNG, or WebP, up to {MAX_IMAGE_MB} MB.</div>
         </div>
 
-        <button type="submit" className="btn btn-success" disabled={submitting}>
+        <button type="submit" className="btn bamboo-btn" disabled={submitting}>
           {submitting ? 'Uploading…' : 'Continue'}
         </button>
       </form>

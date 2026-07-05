@@ -1,18 +1,420 @@
 /* ===== Tailwind (namespaced tw-, important) ===== */
 /* Directives included so tw-* utilities are emitted. Bootstrap + this sheet
    provide the base layer; Tailwind is opt-in via tw- classes (PATTERN-SPEC
-   §B4.3.5). */
+   §B4.3.5). Loaded AFTER Bootstrap (see pages/_app.js), so the brand rules below
+   win over Bootstrap at equal specificity. */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ===== Base ===== */
-body {
-  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  background-color: #ffffff;
+/* ============================================================================
+   88 BAMBOO STOREFRONT SKIN
+   Ported from 88BAMBOO-SHOPIFY-STYLE-REFERENCE (see STYLE-PARITY-PLAN.md). The
+   whole storefront is SERIF: Buenard 400 headings, generic serif body, slate
+   (#3d4246) UI text on white, dark-green (#004f2d) cream-labelled buttons, a
+   yellow reviews strip and a green announcement strip. No Shopify Liquid/JS is
+   ported — this is a pure visual translation.
+   ========================================================================== */
+
+:root {
+  /* colours */
+  --bamboo-bg: #ffffff;
+  --bamboo-text: #3d4246;         /* UI / nav / headings */
+  --bamboo-text-hover: #2d3134;   /* ~10% darker slate */
+  --bamboo-body-text: #000000;    /* article / RTE body copy */
+  --bamboo-green: #004f2d;        /* primary button bg */
+  --bamboo-green-hi: #009c59;     /* button hover */
+  --bamboo-green-header: #0b4321; /* announcement/marquee bar bg */
+  --bamboo-green-link: #1a6132;   /* prose link accent */
+  --bamboo-green-h6: #03652a;
+  --bamboo-button-text: #f2f0e3;  /* cream */
+  --bamboo-yellow: #fcc200;       /* reviews bar */
+  --bamboo-border: #e8e9eb;
+  --bamboo-border-form: #949494;
+  --bamboo-footer-bg: #f5f5f5;
+  --bamboo-muted: #6b7177;        /* small meta text */
+
+  /* type */
+  --font-heading: 'Buenard', Georgia, 'Times New Roman', serif; /* weight 400 */
+  --font-body: Georgia, 'Times New Roman', serif;
+
+  /* layout */
+  --page-width: 1200px;
+  --article-measure: 760px;
+  --radius: 2px;
 }
 
-/* Brand palette reference (also in tailwind.config.mjs):
-   custom-green #0B4321 · custom-orange #DD9E54 · nav-color #FFFCF6 */
+/* ---- Base ---- */
+body {
+  font-family: var(--font-body);
+  color: var(--bamboo-text);
+  background-color: var(--bamboo-bg);
+}
 
-/* Feature-specific styles are added per phase below this banner. */
+/* Headings are Buenard 400 (NOT bold — reference §2). Bootstrap sets 500; this
+   wins by cascade order. Colour is slate, matching the storefront. */
+h1, h2, h3, h4, h5,
+.h1, .h2, .h3, .h4, .h5 {
+  font-family: var(--font-heading);
+  font-weight: 400;
+  color: var(--bamboo-text);
+}
+
+/* h6 is a special case: serif 700 green body text, not a Buenard heading. */
+h6, .h6 {
+  font-family: var(--font-body);
+  font-weight: 700;
+  color: var(--bamboo-green-h6);
+}
+
+/* Links: slate, not underlined by default; hover darkens (reference §10). */
+a {
+  color: var(--bamboo-text);
+  text-decoration: none;
+}
+a:hover,
+a:focus {
+  color: var(--bamboo-text-hover);
+}
+
+/* ---- Layout containers ---- */
+.page-width {
+  max-width: var(--page-width);
+  margin: 0 auto;
+  padding-left: 22px;
+  padding-right: 22px;
+}
+.article-measure {
+  max-width: var(--article-measure);
+  margin: 0 auto;
+  padding-left: 22px;
+  padding-right: 22px;
+}
+.main-content {
+  padding-top: 35px;
+}
+@media (min-width: 750px) {
+  .page-width { padding-left: 30px; padding-right: 30px; }
+  .main-content { padding-top: 55px; }
+}
+
+/* ---- Article-page title (event detail) ---- */
+/* Left-aligned Buenard, ~32px desktop / ~26px mobile (Decision 2, reference §3). */
+.article-title {
+  font-family: var(--font-heading);
+  font-weight: 400;
+  color: var(--bamboo-text);
+  font-size: 26px;
+  line-height: 1.2;
+}
+@media (min-width: 750px) {
+  .article-title { font-size: 32px; }
+}
+
+/* Body/RTE prose: black serif copy with a green underline link accent. */
+.bamboo-prose {
+  color: var(--bamboo-body-text);
+  font-size: 16px;
+  line-height: 1.5;
+}
+.bamboo-prose a {
+  color: var(--bamboo-body-text);
+  text-decoration: underline;
+  text-decoration-color: var(--bamboo-green-link);
+}
+
+/* ============================================================================
+   BUTTONS — storefront .btn, delivered as .bamboo-btn so Bootstrap's own .btn
+   (used by modals/pagination/etc.) is left untouched (Decision 4, reference §9).
+   Most CTAs carry `btn bamboo-btn`; .bamboo-btn is also self-sufficient alone.
+   ========================================================================== */
+.bamboo-btn {
+  display: inline-block;
+  font-family: var(--font-heading);
+  font-weight: 400;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+  text-align: center;
+  text-decoration: none;
+  white-space: normal;
+  cursor: pointer;
+  padding: 8px 15px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background-color: var(--bamboo-green);
+  color: var(--bamboo-button-text);
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+@media (min-width: 750px) {
+  .bamboo-btn { padding: 10px 18px; }
+}
+.bamboo-btn:hover,
+.bamboo-btn:focus {
+  background-color: var(--bamboo-green-hi);
+  color: var(--bamboo-button-text);
+  border-color: transparent;
+}
+.bamboo-btn:disabled,
+.bamboo-btn.disabled,
+.bamboo-btn[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Secondary: transparent bg, green text + border. */
+.bamboo-btn--secondary {
+  background-color: transparent;
+  color: var(--bamboo-green);
+  border-color: var(--bamboo-green);
+}
+.bamboo-btn--secondary:hover,
+.bamboo-btn--secondary:focus {
+  background-color: var(--bamboo-green);
+  color: var(--bamboo-button-text);
+  border-color: var(--bamboo-green);
+}
+
+/* Tertiary: transparent bg, slate text + border (card "Read more"). */
+.bamboo-btn--tertiary {
+  background-color: transparent;
+  color: var(--bamboo-text);
+  border-color: var(--bamboo-text);
+}
+.bamboo-btn--tertiary:hover,
+.bamboo-btn--tertiary:focus {
+  background-color: var(--bamboo-text);
+  color: #fff;
+  border-color: var(--bamboo-text);
+}
+
+/* Small variant — also auto-applies when a CTA still carries Bootstrap's .btn-sm
+   (e.g. the listing view toggle), so those don't inherit the full-size padding. */
+.bamboo-btn--small,
+.btn-sm.bamboo-btn {
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* ---- Forms (reference §10/§13) ---- */
+.form-control,
+.form-select {
+  border-color: var(--bamboo-border-form);
+  border-radius: var(--radius);
+}
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--bamboo-green);
+  box-shadow: 0 0 0 0.2rem rgba(0, 79, 45, 0.15);
+}
+@media (max-width: 749px) {
+  /* 16px prevents iOS zoom-on-focus (reference §13). */
+  .form-control,
+  .form-select {
+    font-size: 16px;
+  }
+}
+
+/* ============================================================================
+   TOP BARS + NAV
+   ========================================================================== */
+
+/* "Just In" marquee strip (static — Decision 9). */
+.bamboo-marquee {
+  background-color: var(--bamboo-green-header);
+}
+.bamboo-marquee a,
+.bamboo-marquee span {
+  color: #ffffff;
+  font-family: var(--font-heading);
+  font-size: 14px;
+  text-decoration: none;
+}
+.bamboo-marquee a:hover {
+  color: #ffffff;
+  text-decoration: underline;
+}
+
+/* Yellow reviews bar (reference §6). */
+.bamboo-reviews-bar {
+  background-color: var(--bamboo-yellow);
+}
+.bamboo-reviews-bar__label {
+  color: var(--bamboo-text);
+  font-weight: 700;
+}
+.bamboo-reviews-bar a {
+  color: var(--bamboo-text);
+  font-weight: 700;
+  text-decoration: underline;
+}
+.bamboo-reviews-bar a:hover {
+  color: var(--bamboo-text-hover);
+}
+
+/* Header / nav (reference §6). Logo left, white bg, hairline bottom border. */
+.bamboo-navbar {
+  background-color: var(--bamboo-bg);
+  border-bottom: 1px solid var(--bamboo-border);
+}
+.bamboo-logo {
+  max-width: 70px;
+  height: auto;
+}
+.bamboo-nav-link {
+  color: var(--bamboo-text);
+  font-family: var(--font-heading);
+  font-weight: 400;
+  text-decoration: none;
+  background: transparent;
+  border: 0;
+}
+.bamboo-nav-link:hover,
+.bamboo-nav-link:focus {
+  color: var(--bamboo-green-link);
+}
+/* Dropdown menus: serif items, hairline card. */
+.bamboo-navbar .dropdown-menu {
+  border-color: var(--bamboo-border);
+  border-radius: var(--radius);
+  font-family: var(--font-body);
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.bamboo-navbar .dropdown-item {
+  color: var(--bamboo-text);
+  white-space: normal;
+}
+.bamboo-navbar .dropdown-item:hover,
+.bamboo-navbar .dropdown-item:focus {
+  color: var(--bamboo-green-link);
+  background-color: #f7f7f5;
+}
+
+/* Mobile off-canvas drawer accordion. */
+.bamboo-drawer-link {
+  display: block;
+  padding: 12px 4px;
+  color: var(--bamboo-text);
+  font-family: var(--font-heading);
+  text-decoration: none;
+  border-bottom: 1px solid var(--bamboo-border);
+  background: transparent;
+  width: 100%;
+  text-align: left;
+}
+.bamboo-drawer-sublink {
+  display: block;
+  padding: 8px 4px 8px 18px;
+  color: var(--bamboo-text);
+  font-family: var(--font-body);
+  font-size: 15px;
+  text-decoration: none;
+  border-bottom: 1px solid var(--bamboo-border);
+}
+
+/* ============================================================================
+   FOOTER (exact storefront replica — Decision 7; reference §8)
+   ========================================================================== */
+.bamboo-footer {
+  background-color: var(--bamboo-footer-bg);
+  color: var(--bamboo-text);
+}
+.bamboo-footer a {
+  color: var(--bamboo-text);
+  text-decoration: none;
+}
+.bamboo-footer a:hover {
+  color: var(--bamboo-text-hover);
+  text-decoration: underline;
+}
+.bamboo-footer__hr {
+  border: 0;
+  border-top: 1px solid #dddddd;
+  margin: 24px 0;
+}
+.bamboo-footer__social {
+  font-size: 1.25rem;
+}
+.bamboo-footer__social a {
+  margin-right: 16px;
+}
+
+/* ============================================================================
+   EVENT CARDS — editorial article-card shell + light event affordances
+   (Decision 5, reference §11)
+   ========================================================================== */
+.event-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #fff;
+  border: 1px solid var(--bamboo-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: box-shadow 0.2s ease;
+}
+.event-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+.event-card__imgwrap {
+  position: relative;
+  width: 100%;
+  padding-top: 66%; /* ~3:2 editorial thumbnail */
+  background: var(--bamboo-footer-bg);
+  overflow: hidden;
+}
+.event-card__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.event-card__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  padding: 18px;
+}
+.event-card__title {
+  font-family: var(--font-heading);
+  font-weight: 400;
+  font-size: 22px;
+  line-height: 1.2;
+  color: var(--bamboo-text);
+  margin: 0 0 6px;
+}
+.event-card__date {
+  font-size: 13px;
+  color: var(--bamboo-muted);
+  margin-bottom: 2px;
+}
+.event-card__place {
+  font-size: 13px;
+  color: var(--bamboo-muted);
+}
+.event-card__excerpt {
+  color: var(--bamboo-text);
+  font-size: 15px;
+  line-height: 1.45;
+  margin: 10px 0 16px;
+}
+
+/* Light event badge (format tag) — greenish, not a loud pill. */
+.badge-bamboo {
+  display: inline-block;
+  font-family: var(--font-heading);
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--bamboo-green);
+  background: #e9f2ec;
+  border-radius: var(--radius);
+  padding: 2px 8px;
+}
+.badge-bamboo--muted {
+  color: var(--bamboo-muted);
+  background: var(--bamboo-footer-bg);
+}

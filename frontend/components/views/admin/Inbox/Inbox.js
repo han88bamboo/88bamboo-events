@@ -58,7 +58,7 @@ function Inbox() {
   return (
     <main className="container py-4" style={{ maxWidth: 900 }}>
       <div className="d-flex justify-content-between align-items-center mb-4">
-        <h1 className="tw-text-custom-green mb-0" style={{ fontFamily: 'Sora, sans-serif' }}>
+        <h1 className="tw-text-bamboo-slate mb-0" style={{ fontFamily: 'Buenard, Georgia, "Times New Roman", serif' }}>
           Inbox
         </h1>
         <button type="button" className="btn btn-outline-secondary btn-sm" onClick={load}>

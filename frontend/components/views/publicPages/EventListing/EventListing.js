@@ -95,6 +95,18 @@ function buildParams(f) {
   return p;
 }
 
+// Short editorial excerpt for a card: first ~120 chars of the description, on a
+// word boundary, with an ellipsis. Empty when there's no description (the card
+// falls back to the date/place lines).
+function excerptOf(event) {
+  const d = (event.description || '').trim().replace(/\s+/g, ' ');
+  if (!d) return '';
+  if (d.length <= 120) return d;
+  const cut = d.slice(0, 120);
+  const lastSpace = cut.lastIndexOf(' ');
+  return `${(lastSpace > 60 ? cut.slice(0, lastSpace) : cut).trim()}…`;
+}
+
 function EventCard({ event, view }) {
   const past = isPastEvent(event);
   const href = `/${event.slug}`; // basePath '/a/events' is prepended by next/link
@@ -135,46 +147,35 @@ function EventCard({ event, view }) {
     );
   }
 
-  // grid card
+  // grid card — editorial article-card shell (STYLE-PARITY-PLAN §8, reference §11):
+  // native-ratio-cover image on top, Buenard title, muted date/place, short
+  // excerpt, and a tertiary "View event" pill; light format/past badges for scan.
+  const place = [event.venue_name, event.city, event.country].filter(Boolean).join(' · ');
   return (
     <div className="col-sm-6 col-lg-4 mb-4">
-      <Link href={href} className="text-decoration-none text-reset">
-        <div className={`card h-100 shadow-sm ${past ? 'opacity-75' : ''}`}>
-          {event.image_url && (
-            <img
-              src={event.image_url}
-              alt=""
-              className="card-img-top"
-              style={{ height: 180, objectFit: 'cover' }}
-            />
-          )}
-          <div className="card-body d-flex flex-column">
-            {past && (
-              <span className="badge bg-secondary align-self-start mb-2">
-                This event is over
-              </span>
+      <Link href={href} className="text-decoration-none text-reset d-block h-100">
+        <article className={`event-card ${past ? 'opacity-75' : ''}`}>
+          <div className="event-card__imgwrap">
+            {event.image_url && (
+              <img src={event.image_url} alt="" className="event-card__img" />
             )}
-            <h5 className="card-title">{event.name}</h5>
-            <p className="card-text small text-muted mb-1">
-              {formatDateRange(event.start_datetime, event.end_datetime)}
-            </p>
-            <p className="card-text small text-muted mb-2">
-              {[event.venue_name, event.city, event.country].filter(Boolean).join(' · ')}
-            </p>
-            <div className="mt-auto d-flex flex-wrap gap-1">
-              {event.event_format && (
-                <span className="badge bg-success-subtle text-success-emphasis">
-                  {event.event_format}
-                </span>
-              )}
-              {categories.slice(0, 3).map((c) => (
-                <span key={c} className="badge bg-light text-dark">
-                  {c}
-                </span>
-              ))}
-            </div>
           </div>
-        </div>
+          <div className="event-card__body">
+            <div className="d-flex flex-wrap gap-1 mb-2">
+              {past && <span className="badge-bamboo badge-bamboo--muted">This event is over</span>}
+              {event.event_format && <span className="badge-bamboo">{event.event_format}</span>}
+            </div>
+            <h3 className="event-card__title">{event.name}</h3>
+            <div className="event-card__date">
+              {formatDateRange(event.start_datetime, event.end_datetime)}
+            </div>
+            {place && <div className="event-card__place">{place}</div>}
+            {excerptOf(event) && <p className="event-card__excerpt">{excerptOf(event)}</p>}
+            <span className="bamboo-btn bamboo-btn--tertiary bamboo-btn--small mt-auto align-self-start">
+              View event
+            </span>
+          </div>
+        </article>
       </Link>
     </div>
   );
@@ -241,7 +242,7 @@ function MonthCalendar({ events }) {
           ‹
         </button>
         <div className="d-flex align-items-center gap-2">
-          <h5 className="mb-0" style={{ fontFamily: 'Sora, sans-serif' }}>{monthLabel(cursor)}</h5>
+          <h5 className="mb-0" style={{ fontFamily: 'Buenard, Georgia, "Times New Roman", serif' }}>{monthLabel(cursor)}</h5>
           <button type="button" className="btn btn-sm btn-link text-decoration-none p-0" onClick={goToday}>
             Today
           </button>
@@ -391,16 +392,16 @@ function EventListing({ initialEvents = [], taxonomy, countries = [], initialFil
     setFilters((prev) => ({ ...prev, [key]: e.target.value }));
 
   return (
-    <main className="container py-5">
+    <main className="page-width py-5">
       <div className="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
-        <h1 className="tw-text-custom-green mb-0" style={{ fontFamily: 'Sora, sans-serif' }}>
+        <h1 className="mb-0">
           Drinks &amp; hospitality events
         </h1>
         <div className="d-flex gap-2">
-          <Link href="/submit" className="btn btn-success">
+          <Link href="/submit" className="btn bamboo-btn">
             List an event
           </Link>
-          <Link href="/account" className="btn btn-outline-success">
+          <Link href="/account" className="btn bamboo-btn bamboo-btn--secondary">
             Manage your listings
           </Link>
         </div>
@@ -493,21 +494,21 @@ function EventListing({ initialEvents = [], taxonomy, countries = [], initialFil
         <div className="btn-group" role="group" aria-label="View mode">
           <button
             type="button"
-            className={`btn btn-sm ${view === 'grid' ? 'btn-success' : 'btn-outline-success'}`}
+            className={`btn btn-sm ${view === 'grid' ? 'bamboo-btn' : 'bamboo-btn bamboo-btn--secondary'}`}
             onClick={() => setView('grid')}
           >
             Grid
           </button>
           <button
             type="button"
-            className={`btn btn-sm ${view === 'list' ? 'btn-success' : 'btn-outline-success'}`}
+            className={`btn btn-sm ${view === 'list' ? 'bamboo-btn' : 'bamboo-btn bamboo-btn--secondary'}`}
             onClick={() => setView('list')}
           >
             List
           </button>
           <button
             type="button"
-            className={`btn btn-sm ${view === 'calendar' ? 'btn-success' : 'btn-outline-success'}`}
+            className={`btn btn-sm ${view === 'calendar' ? 'bamboo-btn' : 'bamboo-btn bamboo-btn--secondary'}`}
             onClick={() => setView('calendar')}
           >
             Calendar

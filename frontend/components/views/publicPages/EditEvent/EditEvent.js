@@ -92,7 +92,7 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
 
   return (
     <main className="container py-5" style={{ maxWidth: 720 }}>
-      <h1 className="tw-text-custom-green mb-1" style={{ fontFamily: 'Sora, sans-serif' }}>
+      <h1 className="tw-text-bamboo-slate mb-1" style={{ fontFamily: 'Buenard, Georgia, "Times New Roman", serif' }}>
         Edit your event
       </h1>
       <p className="text-muted">
@@ -215,7 +215,7 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
         {extras}
 
         <div className="d-flex gap-2">
-          <button type="submit" className="btn btn-success" disabled={submitting}>
+          <button type="submit" className="btn bamboo-btn" disabled={submitting}>
             {submitting ? 'Saving…' : submitLabel || 'Submit changes for review'}
           </button>
           {onCancel && (

@@ -57,7 +57,7 @@ function ManageView({ initialSlug }) {
 
   return (
     <main className="container py-5" style={{ maxWidth: 620 }}>
-      <h1 className="tw-text-custom-green mb-3" style={{ fontFamily: 'Sora, sans-serif' }}>
+      <h1 className="tw-text-bamboo-slate mb-3" style={{ fontFamily: 'Buenard, Georgia, "Times New Roman", serif' }}>
         Edit your listing
       </h1>
       <p className="text-muted">
@@ -91,7 +91,7 @@ function ManageView({ initialSlug }) {
             required
           />
         </div>
-        <button type="submit" className="btn btn-success" disabled={submitting}>
+        <button type="submit" className="btn bamboo-btn" disabled={submitting}>
           {submitting ? 'Sending…' : 'Email me an edit link'}
         </button>
       </form>
