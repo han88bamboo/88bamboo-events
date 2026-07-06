@@ -30,6 +30,7 @@ from flask import Blueprint, jsonify, request
 
 from app import db_manager
 from event_versioning import create_edit_version, editable_version
+from geo_reference import load_geo
 from magic_links import create_magic_link, mark_used, resolve_token
 from notifications import (
     send_edit_received,
@@ -63,6 +64,12 @@ def _load_active_taxonomy():
         cursor.execute("SELECT label FROM event_formats WHERE active = TRUE")
         formats = {row["label"] for row in cursor.fetchall()}
     return categories, formats
+
+
+def _load_geo():
+    """Canonical country/region reference for validating an edit (EP-2)."""
+    with db_manager.get_cursor(commit=False) as cursor:
+        return load_geo(cursor)
 
 
 # _editable_version + the edit-version creation now live in event_versioning.py
@@ -156,6 +163,15 @@ def context():
                         "venue_address": version["venue_address"],
                         "country": version["country"],
                         "city": version["city"],
+                        "region": version["region"],
+                        # NUMERIC -> float so the coordinates are JSON-serialisable
+                        # and re-usable as hidden fields on the edit form (EP-2).
+                        "latitude": float(version["latitude"])
+                        if version["latitude"] is not None else None,
+                        "longitude": float(version["longitude"])
+                        if version["longitude"] is not None else None,
+                        "place_id": version["place_id"],
+                        "postcode": version["postcode"],
                         "description": version["description"],
                         "link": version["link"],
                         "event_format": version["event_format"],
@@ -184,10 +200,16 @@ def submit_edit():
     # — never trust the client), same validators as a fresh submission.
     try:
         allowed_categories, allowed_formats = _load_active_taxonomy()
+        geo = _load_geo()
     except psycopg2.Error:
         return jsonify({"code": 500, "error": "Database error occurred"}), 500
 
-    cleaned, errors = validate_submission(event_fields, allowed_categories, allowed_formats)
+    # require_address_selection=False: an edit's prefilled/legacy address stays
+    # editable without a re-pick; the versioning layer carries coordinates forward.
+    cleaned, errors = validate_submission(
+        event_fields, allowed_categories, allowed_formats, geo,
+        require_address_selection=False,
+    )
     if errors:
         return jsonify({"code": 400, "error": "Validation failed", "errors": errors}), 400
 

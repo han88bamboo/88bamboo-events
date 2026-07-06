@@ -32,6 +32,7 @@ from flask import Blueprint, jsonify, request
 from psycopg2.extras import Json
 
 from app import db_manager
+from geo_reference import load_geo
 from magic_links import create_magic_link
 from notifications import send_new_submission_admin, send_under_review
 from payments import (
@@ -81,6 +82,13 @@ def _load_active_taxonomy():
     return categories, formats
 
 
+def _load_geo():
+    """Canonical country/region reference for validation (EP-2 — the DB is the
+    single source of truth for the country + region lists)."""
+    with db_manager.get_cursor(commit=False) as cursor:
+        return load_geo(cursor)
+
+
 @blueprint.route("", methods=["POST"])
 @rate_limited(_limiter)
 def submit_event():
@@ -90,9 +98,10 @@ def submit_event():
     if (request.form.get(HONEYPOT_FIELD) or "").strip():
         return jsonify({"code": 200, "data": "received"}), 200
 
-    # 2) Validate the non-file fields against the live taxonomy.
+    # 2) Validate the non-file fields against the live taxonomy + geo reference.
     try:
         allowed_categories, allowed_formats = _load_active_taxonomy()
+        geo = _load_geo()
     except psycopg2.Error:
         return jsonify({"code": 500, "error": "Database error occurred"}), 500
 
@@ -106,13 +115,18 @@ def submit_event():
         "venue_address": request.form.get("venue_address"),
         "country": request.form.get("country"),
         "city": request.form.get("city"),
+        "region": request.form.get("region"),
+        "latitude": request.form.get("latitude"),
+        "longitude": request.form.get("longitude"),
+        "place_id": request.form.get("place_id"),
+        "postcode": request.form.get("postcode"),
         "description": request.form.get("description"),
         "link": request.form.get("link"),
         "event_format": request.form.get("event_format"),
         "submission_type": request.form.get("submission_type"),
         "drink_categories": request.form.getlist("drink_categories"),
     }
-    cleaned, errors = validate_submission(data, allowed_categories, allowed_formats)
+    cleaned, errors = validate_submission(data, allowed_categories, allowed_formats, geo)
 
     # 3) Validate the image BEFORE uploading (plan §6). Read the stream once; the
     #    bytes are reused for the upload so the file is never read twice.
@@ -199,10 +213,11 @@ def create_intent():
     #    re-posts (plan §6). Same validators as 3a, against the live taxonomy.
     try:
         allowed_categories, allowed_formats = _load_active_taxonomy()
+        geo = _load_geo()
     except psycopg2.Error:
         return jsonify({"code": 500, "error": "Database error occurred"}), 500
 
-    cleaned, errors = validate_submission(event, allowed_categories, allowed_formats)
+    cleaned, errors = validate_submission(event, allowed_categories, allowed_formats, geo)
     if not image.get("s3_key") or not image.get("url"):
         errors.append("Missing uploaded image reference. Please start over.")
     if not payment_method_id:
@@ -285,11 +300,12 @@ def create_intent():
             cursor.execute(
                 "INSERT INTO event_versions ("
                 "  event_id, version_number, approval_status, name, start_datetime,"
-                "  end_datetime, venue_name, venue_address, country, city,"
+                "  end_datetime, venue_name, venue_address, country, city, region,"
+                "  latitude, longitude, place_id, postcode,"
                 "  description, link, contact_email, image_url, submission_type,"
                 "  drink_categories, event_format"
                 ") VALUES (%s, 1, 'pending_review', %s, %s, %s, %s, %s, %s, %s, %s,"
-                "          %s, %s, %s, %s, %s, %s) RETURNING id",
+                "          %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
                 (
                     event_id,
                     cleaned["name"],
@@ -299,6 +315,11 @@ def create_intent():
                     cleaned["venue_address"],
                     cleaned["country"],
                     cleaned["city"],
+                    cleaned["region"],
+                    cleaned["latitude"],
+                    cleaned["longitude"],
+                    cleaned["place_id"],
+                    cleaned["postcode"],
                     cleaned["description"],
                     cleaned["link"],
                     cleaned["contact_email"],

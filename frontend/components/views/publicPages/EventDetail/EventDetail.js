@@ -13,20 +13,37 @@ function EventDetail({ event }) {
   if (!event) return null;
   const past = isPastEvent(event);
   const categories = event.drink_categories || [];
-  const where = [event.venue_name, event.venue_address, event.city, event.country]
+  const where = [
+    event.venue_name,
+    event.venue_address,
+    event.city,
+    event.region,
+    event.country,
+  ]
     .filter(Boolean)
     .join(', ');
-  // The map query drops the venue NAME (a name alone geocodes poorly) and uses the
-  // address parts. Keyless Google embed (`output=embed`) — no API key needed; EP-2
-  // will swap this for exact lat,lng coordinates once they are captured at submit.
-  const mapQuery = [event.venue_address, event.city, event.country]
+  // Prefer an EXACT PIN from the stored coordinates (EP-2): the address was
+  // Google-validated at submit, so `lat,lng` places the marker precisely. Legacy
+  // events (no coordinates) fall back to the EP-1 address-string query, which drops
+  // the venue NAME (a name alone geocodes poorly). Either way the embed is keyless
+  // (`output=embed`) — no Google API key needed on the detail page.
+  const hasCoords = event.latitude != null && event.longitude != null;
+  const coordQuery = hasCoords ? `${event.latitude},${event.longitude}` : null;
+  const addressQuery = [event.venue_address, event.city, event.region, event.country]
     .filter(Boolean)
     .join(', ');
+  const mapQuery = coordQuery || addressQuery;
   const mapSrc = mapQuery
     ? `https://www.google.com/maps?q=${encodeURIComponent(mapQuery)}&output=embed`
     : null;
+  // Directions to the exact coordinates when we have them, pinned to the Google
+  // place_id for accuracy; else to the address string.
   const directionsUrl = mapQuery
-    ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(mapQuery)}`
+    ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(mapQuery)}${
+        hasCoords && event.place_id
+          ? `&destination_place_id=${encodeURIComponent(event.place_id)}`
+          : ''
+      }`
     : null;
 
   return (

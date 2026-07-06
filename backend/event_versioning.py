@@ -52,6 +52,26 @@ def create_edit_version(cursor, event_id, published_version_id, cleaned,
     source = editable_version(cursor, event_id, published_version_id)
     image_url = source["image_url"] if source else None
 
+    # Carry the captured LOCATION forward the same way (EP-2): if the edit did not
+    # change the address, keep the source version's coordinates / place_id / postcode
+    # so an untouched (or legacy, coordinate-less) address is never forced through a
+    # re-pick. A CHANGED address brings its own coordinates from its new Google
+    # selection (already in `cleaned`). `region` is a separate controlled dropdown,
+    # so it always comes from the submitted form.
+    same_address = bool(source) and (cleaned.get("venue_address") or None) == (
+        source["venue_address"] or None
+    )
+    if same_address and cleaned.get("latitude") is None:
+        latitude = source["latitude"]
+        longitude = source["longitude"]
+        place_id = source["place_id"]
+        postcode = source["postcode"]
+    else:
+        latitude = cleaned.get("latitude")
+        longitude = cleaned.get("longitude")
+        place_id = cleaned.get("place_id")
+        postcode = cleaned.get("postcode")
+
     # New version number = current max + 1 (full history retained).
     cursor.execute(
         "SELECT COALESCE(MAX(version_number), 0) + 1 AS n "
@@ -63,11 +83,12 @@ def create_edit_version(cursor, event_id, published_version_id, cleaned,
     cursor.execute(
         "INSERT INTO event_versions ("
         "  event_id, version_number, approval_status, name, start_datetime,"
-        "  end_datetime, venue_name, venue_address, country, city,"
+        "  end_datetime, venue_name, venue_address, country, city, region,"
+        "  latitude, longitude, place_id, postcode,"
         "  description, link, contact_email, image_url, submission_type,"
         "  drink_categories, event_format"
         ") VALUES (%s, %s, 'pending_review', %s, %s, %s, %s, %s, %s, %s,"
-        "          %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+        "          %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
         (
             event_id,
             next_version_number,
@@ -78,6 +99,11 @@ def create_edit_version(cursor, event_id, published_version_id, cleaned,
             cleaned["venue_address"],
             cleaned["country"],
             cleaned["city"],
+            cleaned["region"],
+            latitude,
+            longitude,
+            place_id,
+            postcode,
             cleaned["description"],
             cleaned["link"],
             cleaned["contact_email"],

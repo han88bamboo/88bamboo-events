@@ -68,15 +68,28 @@ export function buildEventJsonLd(event) {
   if (event?.image_url) jsonLd.image = [event.image_url];
   if (event?.description) jsonLd.description = event.description;
 
-  // location: a Place with a PostalAddress. Only include the parts we have.
+  // location: a Place with a PostalAddress and, when we have them, GeoCoordinates.
+  // Only include the parts we have (EP-2 adds region/postcode + geo).
   const address = {};
   if (event?.venue_address) address.streetAddress = event.venue_address;
   if (event?.city) address.addressLocality = event.city;
+  if (event?.region) address.addressRegion = event.region;
+  if (event?.postcode) address.postalCode = event.postcode;
   if (event?.country) address.addressCountry = event.country;
-  if (event?.venue_name || Object.keys(address).length) {
+  const hasCoords = event?.latitude != null && event?.longitude != null;
+  if (event?.venue_name || Object.keys(address).length || hasCoords) {
     jsonLd.location = {
       '@type': 'Place',
       ...(event?.venue_name ? { name: event.venue_name } : {}),
+      ...(hasCoords
+        ? {
+            geo: {
+              '@type': 'GeoCoordinates',
+              latitude: event.latitude,
+              longitude: event.longitude,
+            },
+          }
+        : {}),
       ...(Object.keys(address).length
         ? { address: { '@type': 'PostalAddress', ...address } }
         : {}),

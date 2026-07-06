@@ -51,6 +51,14 @@ _PUBLIC_COLUMNS = """
     pv.venue_address,
     pv.country,
     pv.city,
+    pv.region,
+    -- NUMERIC(9,6) -> double precision so jsonify can serialise the coordinates
+    -- (Flask's default encoder rejects Decimal). Legacy events return NULL here and
+    -- the detail page falls back to the address-string map (EP-2 D-4).
+    pv.latitude::double precision  AS latitude,
+    pv.longitude::double precision AS longitude,
+    pv.place_id,
+    pv.postcode,
     pv.description,
     pv.link,
     pv.contact_email,

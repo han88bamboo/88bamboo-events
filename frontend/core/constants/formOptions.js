@@ -1,28 +1,10 @@
 // core/constants/formOptions.js — shared option lists for the submission + edit
-// forms (Eventbrite-parity plan EP-1, B1/B2). Kept as plain constants (not DB
-// taxonomy): unlike drink categories / event formats, the country + submitter-type
-// lists are stable reference data, so hardcoding them avoids a DB round-trip.
-//
-// Country names are the common English short names. A controlled dropdown (rather
-// than a free-text input) stops the "US / USA / United States" drift that would
-// otherwise fragment the listing page's country filter (backend/scripts/events.py
-// /countries is DISTINCT on this column).
-
-export const COUNTRIES = [
-  'Argentina', 'Australia', 'Austria', 'Bahrain', 'Bangladesh', 'Belgium',
-  'Brazil', 'Bulgaria', 'Cambodia', 'Canada', 'Chile', 'China', 'Colombia',
-  'Croatia', 'Cyprus', 'Czech Republic', 'Denmark', 'Egypt', 'Estonia',
-  'Finland', 'France', 'Georgia', 'Germany', 'Greece', 'Hong Kong', 'Hungary',
-  'Iceland', 'India', 'Indonesia', 'Ireland', 'Israel', 'Italy', 'Japan',
-  'Jordan', 'Kenya', 'Kuwait', 'Laos', 'Latvia', 'Lebanon', 'Lithuania',
-  'Luxembourg', 'Macau', 'Malaysia', 'Malta', 'Mexico', 'Monaco', 'Morocco',
-  'Myanmar', 'Nepal', 'Netherlands', 'New Zealand', 'Nigeria', 'Norway', 'Oman',
-  'Pakistan', 'Peru', 'Philippines', 'Poland', 'Portugal', 'Qatar', 'Romania',
-  'Saudi Arabia', 'Serbia', 'Singapore', 'Slovakia', 'Slovenia', 'South Africa',
-  'South Korea', 'Spain', 'Sri Lanka', 'Sweden', 'Switzerland', 'Taiwan',
-  'Thailand', 'Turkey', 'Ukraine', 'United Arab Emirates', 'United Kingdom',
-  'United States', 'Uruguay', 'Vietnam',
-];
+// forms. The SUBMITTER_TYPES list is stable reference data, so it stays a constant
+// (avoids a DB round-trip). The former COUNTRIES constant was removed in EP-2: the
+// country + region lists now come from the backend /geo endpoint (the single
+// source of truth — see core/services/geo.js and components/common/LocationFields),
+// so a country can never drift between the frontend list and the server's
+// validation. `withLegacyValue` is still shared (submitter type + legacy values).
 
 // Submitter type (the "who is listing this" channel). Free-form in the DB, but the
 // input is constrained so the values stay analysable.

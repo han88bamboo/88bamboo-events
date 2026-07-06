@@ -15,7 +15,8 @@
 // "saved/published" message instead).
 import { useState } from 'react';
 
-import { COUNTRIES, SUBMITTER_TYPES, withLegacyValue } from '@/core/constants/formOptions';
+import { SUBMITTER_TYPES, withLegacyValue } from '@/core/constants/formOptions';
+import LocationFields from '@/components/common/LocationFields';
 
 // datetime-local wants 'YYYY-MM-DDTHH:MM'; the API returns full ISO strings.
 const toLocalInput = (iso) => (iso ? String(iso).slice(0, 16) : '');
@@ -35,6 +36,13 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
     venue_address: src.venue_address || '',
     country: src.country || '',
     city: src.city || '',
+    // EP-2 location fields, carried forward so an untouched address keeps its
+    // captured coordinates (the versioning layer also enforces this server-side).
+    region: src.region || '',
+    latitude: src.latitude ?? '',
+    longitude: src.longitude ?? '',
+    place_id: src.place_id || '',
+    postcode: src.postcode || '',
     description: src.description || '',
     link: src.link || '',
     submission_type: src.submission_type || '',
@@ -43,10 +51,13 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
   const [selectedCategories, setSelectedCategories] = useState(src.drink_categories || []);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState([]);
+  const [locationErrors, setLocationErrors] = useState([]); // from LocationFields
   const [done, setDone] = useState(false);
 
   const setField = (key) => (e) =>
     setFields((prev) => ({ ...prev, [key]: e.target.value }));
+
+  const patchFields = (patch) => setFields((prev) => ({ ...prev, ...patch }));
 
   const toggleCategory = (label) =>
     setSelectedCategories((prev) =>
@@ -56,6 +67,12 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrors([]);
+    // Client mirror of the server rules (address must be selected, region
+    // required) surfaced by LocationFields.
+    if (locationErrors.length) {
+      setErrors(locationErrors);
+      return;
+    }
     setSubmitting(true);
     try {
       const { data, ok } = await onSubmit({
@@ -153,30 +170,13 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
           </div>
         </div>
 
-        <div className="mb-3">
-          <label className="form-label" htmlFor="venue_name">Venue name</label>
-          <input id="venue_name" className="form-control" value={fields.venue_name} onChange={setField('venue_name')} maxLength={500} />
-        </div>
-        <div className="mb-3">
-          <label className="form-label" htmlFor="venue_address">Venue address</label>
-          <input id="venue_address" className="form-control" value={fields.venue_address} onChange={setField('venue_address')} />
-        </div>
-
-        <div className="row">
-          <div className="col-md-6 mb-3">
-            <label className="form-label" htmlFor="country">Country *</label>
-            <select id="country" className="form-select" value={fields.country} onChange={setField('country')} required>
-              <option value="">Choose…</option>
-              {withLegacyValue(COUNTRIES, fields.country).map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </div>
-          <div className="col-md-6 mb-3">
-            <label className="form-label" htmlFor="city">City *</label>
-            <input id="city" className="form-control" value={fields.city} onChange={setField('city')} required />
-          </div>
-        </div>
+        {/* Venue name + Google-validated address + country + dependent region +
+            city (EP-2), shared with the submit form via LocationFields. */}
+        <LocationFields
+          values={fields}
+          onChange={patchFields}
+          onValidationChange={setLocationErrors}
+        />
 
         <div className="mb-3">
           <label className="form-label" htmlFor="event_format">Event format *</label>

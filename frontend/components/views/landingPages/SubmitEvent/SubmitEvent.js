@@ -9,7 +9,8 @@
 import { useEffect, useState } from 'react';
 
 import { submissionsService } from '@/core/services/submissions';
-import { COUNTRIES, SUBMITTER_TYPES, withLegacyValue } from '@/core/constants/formOptions';
+import { SUBMITTER_TYPES, withLegacyValue } from '@/core/constants/formOptions';
+import LocationFields from '@/components/common/LocationFields';
 import CheckoutStep from './CheckoutStep';
 
 // Mirror the server's image rules for fast client-side feedback (the server is
@@ -27,6 +28,13 @@ const EMPTY = {
   venue_address: '',
   country: '',
   city: '',
+  // EP-2 location fields: region (controlled subdivision) + the coordinates /
+  // place_id / postcode captured from the Google Places selection.
+  region: '',
+  latitude: '',
+  longitude: '',
+  place_id: '',
+  postcode: '',
   description: '',
   link: '',
   event_format: '',
@@ -50,6 +58,11 @@ function initialFields(prefill) {
     venue_address: prefill.venue_address || '',
     country: prefill.country || '',
     city: prefill.city || '',
+    region: prefill.region || '',
+    latitude: prefill.latitude ?? '',
+    longitude: prefill.longitude ?? '',
+    place_id: prefill.place_id || '',
+    postcode: prefill.postcode || '',
     description: prefill.description || '',
     link: prefill.link || '',
     event_format: prefill.event_format || '',
@@ -86,6 +99,7 @@ function SubmitEvent({ taxonomy, prefill }) {
   const [fields, setFields] = useState(() => initialFields(prefill));
   const [selectedCategories, setSelectedCategories] = useState(prefill?.drink_categories || []);
   const [imageFile, setImageFile] = useState(null);
+  const [locationErrors, setLocationErrors] = useState([]); // from LocationFields
   const [honeypot, setHoneypot] = useState(''); // must stay empty for real users
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState([]);
@@ -102,6 +116,10 @@ function SubmitEvent({ taxonomy, prefill }) {
 
   const setField = (key) => (e) =>
     setFields((prev) => ({ ...prev, [key]: e.target.value }));
+
+  // Merge a partial update (used by LocationFields, which sets several fields at
+  // once from one Google selection).
+  const patchFields = (patch) => setFields((prev) => ({ ...prev, ...patch }));
 
   const toggleCategory = (label) =>
     setSelectedCategories((prev) =>
@@ -123,6 +141,8 @@ function SubmitEvent({ taxonomy, prefill }) {
     if (!fields.end_datetime) msgs.push('End date/time is required.');
     if (!fields.country.trim()) msgs.push('Country is required.');
     if (!fields.city.trim()) msgs.push('City is required.');
+    // Address-pending / region-required checks bubble up from LocationFields.
+    msgs.push(...locationErrors);
     if (!fields.event_format) msgs.push('Event format is required.');
     if (selectedCategories.length === 0)
       msgs.push('Select at least one drink category.');
@@ -348,64 +368,14 @@ function SubmitEvent({ taxonomy, prefill }) {
           appear on the listing.
         </p>
 
-        <div className="mb-3">
-          <label className="form-label" htmlFor="venue_name">
-            Venue name
-          </label>
-          <input
-            id="venue_name"
-            className="form-control"
-            value={fields.venue_name}
-            onChange={setField('venue_name')}
-            maxLength={500}
-          />
-        </div>
-
-        <div className="mb-3">
-          <label className="form-label" htmlFor="venue_address">
-            Venue address
-          </label>
-          <input
-            id="venue_address"
-            className="form-control"
-            value={fields.venue_address}
-            onChange={setField('venue_address')}
-          />
-        </div>
-
-        <div className="row">
-          <div className="col-md-6 mb-3">
-            <label className="form-label" htmlFor="country">
-              Country <span className="text-danger">*</span>
-            </label>
-            <select
-              id="country"
-              className="form-select"
-              value={fields.country}
-              onChange={setField('country')}
-              required
-            >
-              <option value="">Choose…</option>
-              {withLegacyValue(COUNTRIES, fields.country).map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="col-md-6 mb-3">
-            <label className="form-label" htmlFor="city">
-              City <span className="text-danger">*</span>
-            </label>
-            <input
-              id="city"
-              className="form-control"
-              value={fields.city}
-              onChange={setField('city')}
-              required
-            />
-          </div>
-        </div>
+        {/* Venue name + Google-validated address + country + dependent region +
+            city (EP-2). LocationFields owns the Google Places autocomplete and the
+            controlled country/region dropdowns; it reports blocking errors back. */}
+        <LocationFields
+          values={fields}
+          onChange={patchFields}
+          onValidationChange={setLocationErrors}
+        />
 
         <div className="mb-3">
           <label className="form-label" htmlFor="event_format">

@@ -65,6 +65,10 @@ services:
       # the shell env so the pk_test_ key is not committed; empty => checkout
       # disabled with a clear message.
       - NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:-}
+      # Google Maps browser key for the Places Autocomplete address search (EP-2).
+      # Referrer-restricted; read from the shell env so it is not committed. Empty
+      # => the address field degrades to a plain text input (address is optional).
+      - NEXT_PUBLIC_MAPS_BROWSER_KEY=${NEXT_PUBLIC_MAPS_BROWSER_KEY:-}
     ports:
       - "127.0.0.1:8080:3000"
     volumes:

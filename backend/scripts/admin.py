@@ -27,6 +27,7 @@ from psycopg2.extras import Json
 from app import db_manager
 from admin_auth import admin_required, issue_session_token
 from event_versioning import create_edit_version
+from geo_reference import load_geo
 from magic_links import create_conversation_link
 from notifications import (
     send_admin_message,
@@ -119,6 +120,11 @@ def pending():
                     ev.venue_address,
                     ev.country,
                     ev.city,
+                    ev.region,
+                    ev.latitude::double precision  AS latitude,
+                    ev.longitude::double precision AS longitude,
+                    ev.place_id,
+                    ev.postcode,
                     ev.description,
                     ev.link,
                     ev.contact_email,
@@ -237,6 +243,12 @@ def _load_active_taxonomy():
         cursor.execute("SELECT label FROM event_formats WHERE active = TRUE")
         formats = {row["label"] for row in cursor.fetchall()}
     return categories, formats
+
+
+def _load_geo():
+    """Canonical country/region reference for validating an admin edit (EP-2)."""
+    with db_manager.get_cursor(commit=False) as cursor:
+        return load_geo(cursor)
 
 
 # ---------------------------------------------------------------------------
@@ -565,10 +577,17 @@ def edit():
     # never trust the client), same validators as a fresh submission / submitter edit.
     try:
         allowed_categories, allowed_formats = _load_active_taxonomy()
+        geo = _load_geo()
     except psycopg2.Error:
         return jsonify({"code": 500, "error": "Database error occurred"}), 500
 
-    cleaned, errors = validate_submission(event_fields, allowed_categories, allowed_formats)
+    # require_address_selection=False: like the submitter edit paths, an admin edit
+    # of a prefilled/legacy address must not be forced through a re-pick (coords
+    # carry forward in the versioning layer).
+    cleaned, errors = validate_submission(
+        event_fields, allowed_categories, allowed_formats, geo,
+        require_address_selection=False,
+    )
     if errors:
         return jsonify({"code": 400, "error": "Validation failed", "errors": errors}), 400
 
@@ -684,6 +703,11 @@ def live():
                     pv.venue_address,
                     pv.city,
                     pv.country,
+                    pv.region,
+                    pv.latitude::double precision  AS latitude,
+                    pv.longitude::double precision AS longitude,
+                    pv.place_id,
+                    pv.postcode,
                     pv.image_url,
                     pv.event_format,
                     pv.drink_categories,

@@ -15,6 +15,13 @@ from submission_validation import (  # noqa: E402
 CATEGORIES = {"Whisky", "Wine", "Cocktails"}
 FORMATS = {"Tasting", "Masterclass"}
 
+# Canonical geo reference (shape of geo_reference.load_geo) for the EP-2 rules.
+GEO = {
+    "Singapore": {"requires_region": False, "regions": set()},
+    "United States": {"requires_region": True, "regions": {"California", "New York"}},
+    "Hong Kong": {"requires_region": True, "regions": {"Hong Kong"}},
+}
+
 
 def _valid_form(**overrides):
     form = {
@@ -24,7 +31,13 @@ def _valid_form(**overrides):
         "start_datetime": "2026-08-01T18:00",
         "end_datetime": "2026-08-01T21:00",
         "venue_name": "The Cellar",
-        "venue_address": "1 Bamboo Road",
+        # A Google-selected address carries coordinates + a place_id in the same
+        # selection (EP-2 D-2). The fixture mirrors a valid selection.
+        "venue_address": "1 Bamboo Road, Singapore",
+        "latitude": "1.283",
+        "longitude": "103.86",
+        "place_id": "ChIJdummyPlaceId",
+        "postcode": "049483",
         "country": "Singapore",
         "city": "Singapore",
         "description": "An evening of rare drams.",
@@ -134,6 +147,84 @@ class TestValidateSubmission(unittest.TestCase):
             self.assertTrue(
                 any("valid url" in e.lower() for e in errors), msg=f"{url} not rejected"
             )
+
+
+class TestLocationRules(unittest.TestCase):
+    """EP-2 location rules: coordinate range, Google-selection requirement, and the
+    DB-backed country + region checks."""
+
+    def test_lat_lng_out_of_range_rejected(self):
+        _, errors = validate_submission(
+            _valid_form(latitude="200", longitude="-200"), CATEGORIES, FORMATS
+        )
+        self.assertTrue(any("latitude" in e.lower() for e in errors))
+        self.assertTrue(any("longitude" in e.lower() for e in errors))
+
+    def test_address_without_selection_rejected(self):
+        # An address typed without a Google selection (no coords/place_id) is
+        # rejected on a fresh submission (require_address_selection defaults True).
+        _, errors = validate_submission(
+            _valid_form(latitude="", longitude="", place_id=""), CATEGORIES, FORMATS
+        )
+        self.assertTrue(any("suggestions" in e.lower() for e in errors))
+
+    def test_address_selection_relaxed_for_edits(self):
+        # Edit paths pass require_address_selection=False: a coordinate-less
+        # (legacy/prefilled) address is accepted so it stays editable.
+        cleaned, errors = validate_submission(
+            _valid_form(latitude="", longitude="", place_id=""),
+            CATEGORIES, FORMATS, GEO, require_address_selection=False,
+        )
+        self.assertEqual(errors, [])
+        self.assertIsNone(cleaned["latitude"])
+        self.assertIsNone(cleaned["place_id"])
+
+    def test_valid_selection_accepted(self):
+        cleaned, errors = validate_submission(
+            _valid_form(), CATEGORIES, FORMATS, GEO
+        )
+        self.assertEqual(errors, [])
+        self.assertAlmostEqual(cleaned["latitude"], 1.283)
+        self.assertAlmostEqual(cleaned["longitude"], 103.86)
+        self.assertEqual(cleaned["place_id"], "ChIJdummyPlaceId")
+        self.assertEqual(cleaned["postcode"], "049483")
+
+    def test_country_not_in_list_rejected(self):
+        _, errors = validate_submission(
+            _valid_form(country="Atlantis"), CATEGORIES, FORMATS, GEO
+        )
+        self.assertTrue(any("country is not a recognised option" in e.lower() for e in errors))
+
+    def test_region_required_when_country_requires_it(self):
+        # United States requires a region; blank -> error.
+        _, errors = validate_submission(
+            _valid_form(country="United States", region=""), CATEGORIES, FORMATS, GEO
+        )
+        self.assertTrue(any("region is required" in e.lower() for e in errors))
+
+    def test_region_must_be_in_list(self):
+        _, errors = validate_submission(
+            _valid_form(country="United States", region="Narnia"),
+            CATEGORIES, FORMATS, GEO,
+        )
+        self.assertTrue(any("not a recognised option for" in e.lower() for e in errors))
+
+    def test_valid_region_accepted(self):
+        cleaned, errors = validate_submission(
+            _valid_form(country="United States", region="California"),
+            CATEGORIES, FORMATS, GEO,
+        )
+        self.assertEqual(errors, [])
+        self.assertEqual(cleaned["region"], "California")
+
+    def test_region_dropped_for_country_without_subdivisions(self):
+        # Singapore has no region list; any submitted region is not stored.
+        cleaned, errors = validate_submission(
+            _valid_form(country="Singapore", region="Somewhere"),
+            CATEGORIES, FORMATS, GEO,
+        )
+        self.assertEqual(errors, [])
+        self.assertIsNone(cleaned["region"])
 
 
 class TestValidateImage(unittest.TestCase):

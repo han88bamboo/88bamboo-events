@@ -38,6 +38,12 @@ function buildContext(item, isLive) {
       venue_address: item.venue_address || '',
       country: item.country || '',
       city: item.city || '',
+      // EP-2 location fields so the admin edit prefills + carries coords forward.
+      region: item.region || '',
+      latitude: item.latitude ?? '',
+      longitude: item.longitude ?? '',
+      place_id: item.place_id || '',
+      postcode: item.postcode || '',
       description: item.description || '',
       link: item.link || '',
       submission_type: item.submission_type || '',
