@@ -513,6 +513,31 @@ server errors.
 Events button") is **superseded** by G1 per the owner's 2026-07-06 instruction. The Events
 tab remains (it's still the app's own section), but as a plain nav item, not a button.
 
+### Round-3 follow-ups (owner spot-checks, 2026-07-06)
+
+**Gap G5 🔴 — Marquee text weight didn't match the store.** *(Corrects Round-2 Gap B2.)*
+- Root cause: Round-2 read `.announcement-bar__message { font-weight: 700 }` — but that
+  base rule is **overridden by a LATER base rule `font-weight: 400`** in the same
+  `theme.scss.css` (verified: no inline weight on the message/spans; the title span only
+  carries `font-style: oblique`). The store actually renders **400**, so our 700 looked
+  heavier than the store's banner.
+- Fix: `globals.css` `.bamboo-marquee a/span` → `font-weight: 400` (Georgia serif, 14px
+  unchanged). Verified computed = 400 / Georgia / 14px.
+
+**Gap G6 🔴 — Mega-menus closed before the cursor could reach them.**
+- Root cause: mega-menu `<li>`s are `position: static`, so the panel anchors to
+  `.bamboo-navbar` bottom, leaving a **~23px dead zone** (nav-row padding + border) between
+  the tab and the panel. Crossing it dropped `:hover` and closed the menu. (Plain
+  dropdowns anchor to their own `<li>` → no gap → the owner correctly saw no issue there.)
+- Fix: a transparent `.bamboo-megamenu::before` hover-bridge (`top:-28px; height:28px`,
+  full width) — a descendant of the trigger `<li>`, so hovering the gap keeps the menu
+  open. Verified geometry: bridge spans y 98→126, overlapping the button bottom (104) and
+  reaching the panel top (126) — a continuous hoverable path (`bridgesGap: true`). The
+  bridge only exists while the panel is open (`display:block`), so it never blocks the
+  closed navbar.
+
+Files touched (follow-ups): `styles/globals.css`.
+
 ---
 
 ## Owner Decisions Required

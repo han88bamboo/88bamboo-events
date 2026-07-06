@@ -245,10 +245,12 @@ a:focus {
 .bamboo-marquee a,
 .bamboo-marquee span {
   color: #ffffff;
-  /* Storefront .announcement-bar__message: body serif, bold, ~14px (measured
-     live from theme.scss.css) — NOT Buenard, NOT weight 400. */
+  /* Storefront .announcement-bar__message: body serif, ~14px, weight 400 — its
+     base rule sets 700 but a LATER base rule overrides to 400, which is what the
+     store actually renders (verified from theme.scss.css cascade + markup: no
+     inline weight). NOT Buenard, NOT 700. */
   font-family: var(--font-body);
-  font-weight: 700;
+  font-weight: 400;
   font-size: 14px;
   text-decoration: none;
 }
@@ -384,6 +386,20 @@ a:focus {
   text-align: center;
   border-left: 0;
   border-right: 0;
+}
+/* Invisible hover-bridge: the mega panel anchors to the navbar bottom, so a ~23px
+   dead zone (nav row padding + border) sits between the trigger and the panel.
+   This transparent strip — a descendant of the trigger <li> — spans that gap so
+   moving the cursor from the tab down into the panel keeps :hover alive and the
+   menu doesn't close too soon. (Plain dropdowns anchor to their own <li>, so they
+   have no gap and need no bridge.) */
+.bamboo-megamenu::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -28px;
+  height: 28px;
 }
 /* Sizes to its content and stays centered (like the store's width:auto childlist),
    so all columns sit on one row instead of wrapping under a page-width cap. */
