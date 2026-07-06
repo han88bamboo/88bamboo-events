@@ -52,12 +52,26 @@ body {
 }
 
 /* Headings are Buenard 400 (NOT bold — reference §2). Bootstrap sets 500; this
-   wins by cascade order. Colour is slate, matching the storefront. */
+   wins by cascade order. Colour is slate, matching the storefront.
+   The storefront TYPE SCALE (reference §3) must be set explicitly: Tailwind's
+   Preflight (@tailwind base, loaded after Bootstrap) resets bare h1..h6 to
+   font-size:inherit (16px), and Bootstrap's .hN classes give non-storefront
+   sizes — so without these rules every heading renders at the wrong size. */
 h1, h2, h3, h4, h5,
 .h1, .h2, .h3, .h4, .h5 {
   font-family: var(--font-heading);
   font-weight: 400;
   color: var(--bamboo-text);
+  line-height: 1.2;
+  margin: 0 0 17.5px;
+}
+h1, .h1 { font-size: 29px; } /* 22 × 1.35 */
+h2, .h2 { font-size: 22px; }
+h3, .h3 { font-size: 22px; }
+h4, .h4 { font-size: 14px; } /* 22 × 0.68 — footer headings, etc. */
+h5, .h5 { font-size: 12px; }
+@media (max-width: 749px) {
+  h1, .h1 { font-size: 26px; } /* 22 × 1.20 */
 }
 
 /* h6 is a special case: serif 700 green body text, not a Buenard heading. */
@@ -65,6 +79,9 @@ h6, .h6 {
   font-family: var(--font-body);
   font-weight: 700;
   color: var(--bamboo-green-h6);
+  font-size: 16px;
+  line-height: 1.5;
+  margin: 0 0 17.5px;
 }
 
 /* Links: slate, not underlined by default; hover darkens (reference §10). */
@@ -228,7 +245,10 @@ a:focus {
 .bamboo-marquee a,
 .bamboo-marquee span {
   color: #ffffff;
-  font-family: var(--font-heading);
+  /* Storefront .announcement-bar__message: body serif, bold, ~14px (measured
+     live from theme.scss.css) — NOT Buenard, NOT weight 400. */
+  font-family: var(--font-body);
+  font-weight: 700;
   font-size: 14px;
   text-decoration: none;
 }
@@ -237,9 +257,21 @@ a:focus {
   text-decoration: underline;
 }
 
-/* Yellow reviews bar (reference §6). */
+/* Yellow reviews bar (reference §6). Full-width, left-aligned, padding 13px 50px
+   (measured live: .reviews-bar padding + .reviews-bar-words 95%/75%). NOT boxed
+   to page-width and NOT centered, so it stays on one line like the store. */
 .bamboo-reviews-bar {
   background-color: var(--bamboo-yellow);
+}
+.bamboo-reviews-bar__inner {
+  padding: 13px 50px;
+  font-size: 95%;
+}
+@media (max-width: 749px) {
+  .bamboo-reviews-bar__inner {
+    padding: 13px 15px;
+    font-size: 75%;
+  }
 }
 .bamboo-reviews-bar__label {
   color: var(--bamboo-text);
@@ -254,14 +286,38 @@ a:focus {
   color: var(--bamboo-text-hover);
 }
 
-/* Header / nav (reference §6). Logo left, white bg, hairline bottom border. */
+/* Header / nav (reference §6). Logo left, white bg, hairline bottom border.
+   The store header is FULL-WIDTH with padding 0 30px (measured live — it is NOT
+   inside .page-width), so the logo sits flush-left on any viewport. */
 .bamboo-navbar {
   background-color: var(--bamboo-bg);
   border-bottom: 1px solid var(--bamboo-border);
 }
+.bamboo-navbar__row {
+  padding-left: 22px;
+  padding-right: 22px;
+}
+@media (min-width: 750px) {
+  .bamboo-navbar__row {
+    padding-left: 30px;
+    padding-right: 30px;
+  }
+}
 .bamboo-logo {
   max-width: 70px;
   height: auto;
+}
+/* Replace Bootstrap's solid triangle caret with a thin chevron (reference §6). */
+.bamboo-navbar .dropdown-toggle::after {
+  display: inline-block;
+  width: 0.42em;
+  height: 0.42em;
+  margin-left: 0.4em;
+  border: solid currentColor;
+  border-width: 0 1.5px 1.5px 0;
+  transform: translateY(-2px) rotate(45deg);
+  vertical-align: middle;
+  content: "";
 }
 .bamboo-nav-link {
   color: var(--bamboo-text);
@@ -322,13 +378,29 @@ a:focus {
   background-color: var(--bamboo-footer-bg);
   color: var(--bamboo-text);
 }
-.bamboo-footer a {
+/* :not(.bamboo-btn) so the newsletter Subscribe button keeps its cream label —
+   otherwise .bamboo-footer a (slate) overrides .bamboo-btn on specificity and the
+   label goes dark-on-dark. */
+.bamboo-footer a:not(.bamboo-btn) {
   color: var(--bamboo-text);
   text-decoration: none;
 }
-.bamboo-footer a:hover {
+.bamboo-footer a:not(.bamboo-btn):hover {
   color: var(--bamboo-text-hover);
   text-decoration: underline;
+}
+/* Quick-links: two columns on desktop like the store footer; stacked on mobile. */
+.bamboo-footer__links {
+  margin-bottom: 0;
+}
+@media (min-width: 576px) {
+  .bamboo-footer__links {
+    column-count: 2;
+    column-gap: 2.5rem;
+  }
+  .bamboo-footer__links li {
+    break-inside: avoid;
+  }
 }
 .bamboo-footer__hr {
   border: 0;

@@ -17,7 +17,7 @@ const NavBar = () => {
 
   return (
     <header className="bamboo-navbar">
-      <div className="page-width d-flex align-items-center py-2 gap-3">
+      <div className="bamboo-navbar__row d-flex align-items-center py-2 gap-3">
         {/* Logo (left). Plain <img> so no next.config remotePatterns entry is
             needed; links back to the main store home. */}
         <a href={STORE_ORIGIN} className="d-inline-flex align-items-center flex-shrink-0" aria-label="88 Bamboo home">

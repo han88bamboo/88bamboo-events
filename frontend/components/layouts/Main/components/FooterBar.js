@@ -25,7 +25,7 @@ const FooterBar = () => (
         {/* Block 1 — Quick links (events-native first, then the store's footer menu) */}
         <div className="col-12 col-md-6">
           <h4 className="h4 mb-3">Quick links</h4>
-          <ul className="list-unstyled mb-0">
+          <ul className="bamboo-footer__links list-unstyled">
             {EVENTS_LINKS.map((l) => (
               <li className="mb-2" key={l.label}>
                 <Link href={l.href}>{l.label}</Link>
@@ -65,7 +65,9 @@ const FooterBar = () => (
 
       <hr className="bamboo-footer__hr" />
 
-      <div className="d-flex flex-column flex-sm-row justify-content-between align-items-center gap-3">
+      {/* Bottom row: social icons right (payment icons intentionally omitted —
+          owner decision E5), then a centered copyright below, like the store. */}
+      <div className="d-flex justify-content-end">
         <div className="bamboo-footer__social">
           {SOCIAL_LINKS.map((s) => (
             <a
@@ -79,6 +81,8 @@ const FooterBar = () => (
             </a>
           ))}
         </div>
+      </div>
+      <div className="text-center mt-3">
         <small>© {new Date().getFullYear()}, 88 Bamboo</small>
       </div>
     </div>

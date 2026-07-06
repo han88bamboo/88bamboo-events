@@ -301,6 +301,141 @@ Each step is an independent, revertible commit. Steps 1–2 are prerequisites; 3
 
 ---
 
+## Parity Gap Audit — Round 2 (2026-07-06)
+
+Side-by-side review of the live `88bamboo.co/pages/about-us-1` (reference) vs
+`88bamboo.co/a/events/` (ours). Every gap below is tied to a specific line of our
+code. Facts marked **Confirmed (computed)** were read from `getComputedStyle` in a
+running preview; **Confirmed (code)** are direct from source; **Uncertain** means I
+could not verify the reference's exact value from the screenshot and it needs a
+live check against the store. Paths are relative to `frontend/`.
+
+Legend: 🔴 regression to fix · 🟡 intentional divergence (a locked decision) · ⚪ needs a decision.
+
+### A. Global — heading type scale is missing (root cause of several gaps)
+
+**Gap A1 🔴 — All headings render at the wrong size.**
+- Observed: reference article title (`About Us`) is a large ~32px serif; our listing `<h1>` "Drinks & hospitality events" is tiny. Footer "Quick links"/newsletter headings are oversized vs the reference's small ones.
+- Confirmed (computed): our listing `main h1` = **16px**; footer `.h4` = **23.3px**.
+- Code cause: `styles/globals.css:56-61` styles `h1..h5, .h1..h5` for **font-family / weight / colour only — no `font-size`**. The storefront type scale (reference §3: h1 29px, h2 22px, h3 22px, h4 14px, h5 12px, h6 16px) was never ported. Two knock-on effects:
+  1. Bare elements (`<h1 className="mb-0">` in `EventListing.js:397`, submit/admin h1s) fall to **16px** because Tailwind's Preflight (`@tailwind base` at `globals.css:5`, loaded *after* Bootstrap per `pages/_app.js:5-7`) resets `h1..h6 { font-size: inherit }` → 16px, and nothing restores a size.
+  2. Class-based headings (`<h4 className="h4">` in `FooterBar.js:27,44`) get **Bootstrap's** `.h4` size (~23px), not the storefront's 14px.
+- Note: `.article-title` (`globals.css:104-112`, event detail) and `.event-card__title` (`globals.css:383-390`, cards) DO set explicit sizes, so those two are correct — which is why the event-card titles look right while the page `<h1>` does not.
+
+### B. Top marquee (green "Just In" bar)
+
+**Gap B1 🟡 — Marquee text is static, not the latest article.**
+- Observed: reference shows "Just In 👉 Vinexpo Asia To Make Hong Kong Permanent Home" (live latest `news` article); ours shows "Just In 👉 Discover upcoming drinks & hospitality events".
+- Code cause: hard-coded string in `components/layouts/Main/components/AnnouncementMarquee.js:11`. This is **Decision 9** (static strip, no Shopify-blog fetch) — intentional.
+
+**Gap B2 🔴 — Marquee text is the wrong weight and font.** *(Measured live 2026-07-06 from `theme.scss.css` + markup.)*
+- Reference (measured): `.announcement-bar__message { font-size: 0.875em (≈14px desktop) / 0.75em (≈12px small); font-weight: 700; color:#fff; background:#0B4321; padding: 7.33px 55px }`, `.announcement-bar { text-align:center }`. It inherits the **body serif** font (not Buenard). The dynamic title portion carries an inline `font-style: oblique` (italic); the "Just In 👉" lead-in is upright. Markup: `<p class="announcement-bar__message"><span>Just In 👉</span> <span style="font-style:oblique">…title…</span></p>`. (Also `.marquee-container` is `position:sticky; top:0; z-index:1000; height:36px/30px` — a sticky bar.)
+- Ours: `globals.css:230-234` — `.bamboo-marquee a/span { font-size:14px; font-family: var(--font-heading) }` (Buenard), **weight 400**, centered, not sticky.
+- Fix: set the marquee to **font-weight 700** and the **body serif** font (drop Buenard), keep ~14px/centered. Our copy is static (Decision 9) so the oblique tail is optional. Sticky behaviour is a separate nicety — flag but not required.
+
+### C. Header / navbar
+
+**Gap C1 🔴 — Header content is boxed to 1200px; the store header is full-bleed.** *(Resolved live 2026-07-06.)*
+- Measured (live `theme.scss.css`): the store `.site-header` is **NOT wrapped in `.page-width`**. It is full-width: `.site-header { padding: 0 30px; background:white; border-bottom:1px solid #e8e9eb }`, with `.site-header__logo { padding-left: 22px; text-align:left }`. So the logo sits ~30px from the viewport's left edge on any width. (`.page-width { max-width:1200px }` is real, but the store applies it to body content + footer — **not** the header.)
+- Ours (confirmed computed): nav inner wrapper `maxWidth: 1200px` — `NavBar.js:20` wraps the header row in `.page-width` (`globals.css:80-85`), so on wide screens it centers to a 1200 band and the logo indents.
+- Fix: make the navbar **full-width with ~30px side padding** (not `.page-width`). Keep the footer on `.page-width` (that matches the store).
+
+**Gap C2 🟡 — No search icon and no currency (SGD ▾) selector.** *(Owner decision 2026-07-06: do NOT replicate — leave out.)*
+- Observed: reference header right side has a search (magnifier) icon and an "SGD ▾" currency selector; ours has neither.
+- Code cause: `NavBar.js:63-77` renders only the Events CTA + hamburger on the right. Search and currency were never built (search = a store feature; currency = a Shopify storefront/checkout widget).
+- Resolution: **omit** — owner confirmed no need to replicate search or currency. No change required.
+
+**Gap C3 🟡 — There is an extra green "Events" button.**
+- Observed: ours has a green EVENTS button the reference lacks.
+- Code cause: `NavBar.js:64-67`. Intentional — the added Events CTA is part of **Decision 1**.
+
+**Gap C4 🔴 — Dropdown carets are Bootstrap triangles, not chevrons.**
+- Observed: reference dropdown indicators are thin "v" chevrons; ours are filled triangles.
+- Code cause: `NavBar.js:36` uses Bootstrap's `dropdown-toggle` class, whose `::after` draws a solid triangle. The storefront uses a chevron icon (reference §6, `icon-chevron-down`).
+
+### D. Yellow reviews bar
+
+**Gap D1 🔴 — Reviews text is centered and boxed to 1200px, so it wraps to two lines.** *(Reference measured live 2026-07-06.)*
+- Reference (measured): `.reviews-bar { padding: 13px 50px (desktop) / 13px 15px (mobile) }`, full-width (NOT `.page-width`), `margin-bottom: 2.5rem` (inline). The words are in `<span class="reviews-bar-words" style="display:block; width:100%">`, **left-aligned** (no centering), separated by " | ".
+- Ours (confirmed computed): reviews inner wrapper `justifyContent: center`, `maxWidth: 1200px` — `ReviewsBar.js:9` uses `.page-width … justify-content-center` + `flex-wrap`. The yellow `<nav>` background (`ReviewsBar.js:8`) is already full-width (matches); only the inner alignment/width differ.
+- Fix: drop `.page-width` + `justify-content-center`; make the content full-width, **left-aligned**, `padding: 13px 50px`. That removes the two-line wrap.
+
+**Gap D2 🔴 — A ~55px white gap sits above the reviews bar.**
+- Observed: reference reviews bar is flush under the nav; ours has whitespace above it.
+- Confirmed (computed): `.main-content` `padding-top: 55px`.
+- Code cause: `Main.js:16-17` renders `<ReviewsBar/>` *inside* `<div className="main-content">`, and `globals.css:93-98` gives `.main-content` `padding-top: 35px` (mobile) / `55px` (desktop). So the section padding pushes the yellow bar down. In the storefront the reviews bar precedes the padded content region.
+
+**Gap D3 🟡 — Reviews text size is slightly off (weight already matches).** *(Measured live 2026-07-06.)*
+- Reference (measured): `.reviews-bar-words { font-size: 95% (≈15.2px desktop) / 75% (≈12px mobile) }`; the label and every link are inline `font-weight:bold` and links `text-decoration:underline`.
+- Ours: `ReviewsBar.js:9` uses Bootstrap `.small` (**0.875em ≈ 14px**) and `globals.css:248-252` already sets links `font-weight:700` + underline, label bold.
+- Verdict: **weight/underline already correct.** Only the size differs slightly (14px vs ~15px desktop). Minor — will nudge to ~95%/15px while fixing D1 so it's a single touch; not worth a standalone change otherwise.
+
+### E. Footer
+
+**Gap E1 🔴 — Footer headings oversized.** Same root cause as **A1** (`FooterBar.js:27,44` use `<h4 className="h4">` → ~23px; storefront `.h4` is 14px).
+
+**Gap E2 🔴 — Quick links are one long vertical column; the reference uses two columns.**
+- Observed: reference footer menu is laid out in two columns; ours is a single stacked list.
+- Code cause: `FooterBar.js:28` renders a single `<ul className="list-unstyled">`. No multi-column styling.
+
+**Gap E3 🟡 — Extra events-native links at the top of Quick links.**
+- Observed: ours starts with "Browse events / List an event / Manage your listing", which the store footer doesn't have.
+- Code cause: `FooterBar.js:15-19,29-33` (`EVENTS_LINKS`). Intentional (events app's own actions), but it also lengthens the single column (compounds E2).
+
+**Gap E4 🔴 — Newsletter "Subscribe" button label is near-invisible (slate on green).**
+- Observed: reference SUBSCRIBE label is clearly readable; ours is faint.
+- Confirmed (computed): the Subscribe `<a>` has `color: rgb(61,66,70)` (slate `#3d4246`) on `background: rgb(0,79,45)` (green) — dark-on-dark.
+- Code cause: specificity bug. `globals.css:325-327` `.bamboo-footer a { color: var(--bamboo-text) }` (0,2,0) beats `.bamboo-btn { color: var(--bamboo-button-text) }` (0,1,0) at `globals.css:143`, because the button is an `<a class="bamboo-btn">` inside `.bamboo-footer` (`FooterBar.js:56-61`). The cream label is overridden to slate. (A hover underline from `globals.css:329-331` also leaks onto it.)
+
+**Gap E5 🟡 — Payment icons missing.** *(Owner decision 2026-07-06: omit — do NOT add.)*
+- Observed: reference footer shows Amex / Apple Pay / Mastercard / Maestro / Visa icons; ours shows none.
+- Code cause: `FooterBar.js:68-84` renders only social icons + copyright — no payment row.
+- Resolution: **omit** — owner confirmed. The events app takes no payment at the footer, so the store's checkout payment badges are intentionally left out. No change required.
+
+**Gap E6 🔴 — Bottom-row arrangement differs.**
+- Observed: reference bottom = payment icons (left) + social icons (right) on one row, then a centered copyright below. Ours = social icons (left) + copyright (right) on one row, no payment.
+- Code cause: `FooterBar.js:68-84` — a single `justify-content-between` row with social on the left and copyright on the right.
+
+**Gap E7 🟡 — Social set uses a TikTok icon; the reference shows a Tumblr glyph.** *(Owner decision 2026-07-06: keep the TikTok icon.)*
+- Observed: reference third social icon is a Tumblr "t"; ours is TikTok.
+- Code cause: `menuData.js:130-134` `SOCIAL_LINKS` uses `icon: 'bi-tiktok'`. Per reference §8 the store wires TikTok through the **Tumblr** social slot, so it renders a Tumblr glyph that links to TikTok.
+- Resolution: **keep the TikTok icon** — owner confirmed. Ours is the clearer/correct glyph for the actual destination. No change required.
+
+### F. Not visible in these screenshots (still to verify)
+
+**Gap F1 ⚪ — Event detail page (`.article-measure`, ~760px) is not in either screenshot.** Its title uses `.article-title` (correct size) so it likely fares better than the listing `<h1>`, but it should be checked once A1 is fixed, since its badges/prose share the same tokens.
+
+### Round-2 summary — what to fix vs leave *(updated 2026-07-06 with owner decisions + live measurements)*
+
+- **Fix (🔴), all now with confirmed target values:**
+  - **A1** heading type scale — port the storefront scale (h1 29px, h2 22px, h3 22px, h4 14px, h5 12px, h6 16px) so bare `<h1>`s stop collapsing to 16px and `.h4`s stop rendering at ~23px. *Biggest single fix — corrects the tiny page title AND the oversized footer headings (E1).*
+  - **B2** marquee → font-weight 700, body serif (not Buenard).
+  - **C1** navbar → full-width with ~30px side padding (not `.page-width`).
+  - **C4** dropdown carets → chevron icons, not Bootstrap triangles.
+  - **D1** reviews bar → full-width, left-aligned, `padding: 13px 50px` (removes the two-line wrap); **D3** nudge size to ~15px in the same edit.
+  - **D2** reviews gap → move `<ReviewsBar>` above the `.main-content` padding (or drop the padding above it).
+  - **E2** quick links → two columns.
+  - **E4** Subscribe button → fix the `.bamboo-footer a` specificity so the cream label shows.
+  - **E6** footer bottom row → match the store's arrangement (with payment icons omitted per E5).
+- **Leave / omit (🟡), owner-confirmed:** B1 static marquee, C2 search + currency (omit), C3 Events button, E3 events links, E5 payment icons (omit), E7 keep TikTok icon.
+
+Every ⚪ from the first pass is now resolved (owner decisions on C2/E5/E7; live measurements on B2/C1/D1/D3).
+
+**Round-2 fixes — APPLIED & verified 2026-07-06.** The whole 🔴 set has been implemented and confirmed via computed styles in a running preview:
+- A1 — `globals.css` now sets the storefront type scale → listing `<h1>` = **29px**, footer `.h4` = **14px** (were 16px / 23px).
+- B2 — marquee is now **font-weight 700 / Georgia (body serif)**.
+- C1 — navbar uses `.bamboo-navbar__row` (full-width, 22/30px padding) → logo `left: 30px` (was boxed to 1200px).
+- C4 — Bootstrap triangle caret replaced with a CSS chevron.
+- D1/D3 — reviews bar is full-width, **left-aligned** (`justify: normal`), `padding: 13px 50px`, `font-size: 15.2px` — no more two-line wrap on wide screens.
+- D2 — `<ReviewsBar>` moved above `.main-content` so it sits flush under the nav.
+- E2 — footer quick links render in **2 columns**.
+- E4 — `.bamboo-footer a:not(.bamboo-btn)` fix → Subscribe label is **cream (#f2f0e3)** again.
+- E6 — footer bottom row: social icons right, copyright centered below (payment icons omitted per E5).
+
+Files touched: `styles/globals.css`, `components/layouts/Main/{Main.js, components/NavBar.js, components/ReviewsBar.js, components/FooterBar.js}`. `next build` passes.
+
+---
+
 ## Owner Decisions Required
 
 ### Decision 1: Navbar — recreate the Shopify nav exactly, or a simplified Events-compatible version?

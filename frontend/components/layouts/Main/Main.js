@@ -11,10 +11,11 @@ const Main = ({ children }) => (
   <>
     <AnnouncementMarquee />
     <NavBar />
-    {/* A <div> wrapper (not <main>) so each page's own view supplies the single
-        <main> landmark; the reviews bar sits at the very top of the content. */}
+    {/* Reviews bar sits flush under the nav (like the store); the .main-content
+        top padding then provides the gap BELOW it, before the page content. A
+        <div> wrapper (not <main>) keeps each page's own view as the single <main>. */}
+    <ReviewsBar />
     <div className="main-content" id="MainContent">
-      <ReviewsBar />
       {children}
     </div>
     <FooterBar />
