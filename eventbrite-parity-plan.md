@@ -117,7 +117,7 @@ are lighter).
 ### Phase EP-0 — Owner prerequisites & decisions
 - [x] **D-1 provider = Google** (Eventbrite uses Google Maps). *(resolved 2026-07-06)*
 - [x] **D-2 = Google-validated address only** (must pick from the Places dropdown; coords captured from the selection, no separate geocode). **D-3 = no timezone, static note only. D-4 = nullable cols, no backfill. B1 = dropdown.** *(all resolved 2026-07-06)*
-- [ ] **(EP-2 prereq)** Owner sets up Google Cloud: enable **Places API**, create a **referrer-restricted browser key**, provide it as `NEXT_PUBLIC_MAPS_BROWSER_KEY` in `.env.local.example` + Vercel. *(Needed only when EP-2 starts — the EP-1 embed map is keyless.)*
+- [~] **(EP-2 prereq)** Google **Places API** browser key. **Owner added `NEXT_PUBLIC_MAPS_BROWSER_KEY` on Vercel (2026-07-07).** Still to do for **local** EP-2 dev: add the same key to `frontend/.env.local` (and wire it into `docker-compose.yml` `events-web`, like `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`) so the autocomplete works on `localhost:8080`. Document in `.env.local.example`. *(Not needed for EP-1 — its embed map is keyless.)*
 
 ### Phase EP-1 — Cheap wins, no schema change (A1, B1, B2, B3, B4, B5-note)
 - [x] **A1 — Detail-page map + directions.** [`EventDetail.js`](frontend/components/views/publicPages/EventDetail/EventDetail.js) renders a lazy **keyless** `<iframe>` (`https://www.google.com/maps?q=<encoded address>&output=embed`) from the `venue_address, city, country` string (venue NAME dropped — a name alone geocodes poorly), plus a "Get directions" link. Shown only when an address exists. Plain `<iframe>` (no `next/image`) so **no `next.config` change** needed. *(EP-2 swaps the query to exact `lat,lng`; address-string form stays the legacy fallback.)*
@@ -134,6 +134,13 @@ are lighter).
   - **Map query drops the venue name** — geocoding `"LMDW bar, 9 Jln Pakis, …"` is less reliable than the address alone; the venue name still shows in the "Where" text line.
   - **Keyless embed** (`output=embed`) needs no Google key, so the map works in local dev today; the browser key is only needed for EP-2's Places Autocomplete.
   - No new deps. No schema change. `next.config` untouched (iframe, not `next/image`).
+
+  **Owner verification checklist (EP-1)** — handed to owner 2026-07-07 (browse `http://localhost:8080/a/events`):
+  - [ ] Submit form: country + submitter-type are dropdowns; description shows a char counter; local-time note under Starts/Ends; a full submit with `4242…` reaches the pending/confirmation state.
+  - [ ] Detail page: map renders, "Get directions" opens Maps, "Local time…" note under When.
+  - [ ] Edit paths (magic-link `/edit`, account dashboard, admin modal): country/type dropdowns **prefill the existing value, including a legacy value not in the list**; saving doesn't blank them.
+  - [ ] B3: a bad link (`example.com`, `myevent`) is rejected server-side; a valid `https://…` passes.
+  - [ ] Regression: listing-page country filter still works; existing events still render.
 
 ### Phase EP-2 — Location & coordinates (A2, A3 + server-side enforcement) — the schema phase
 - [ ] **Schema.** Add nullable columns to `event_versions` in [`database/schema.sql`](database/schema.sql): `latitude NUMERIC(9,6)`, `longitude NUMERIC(9,6)`, `place_id TEXT`, `postcode VARCHAR(32)`, `region VARCHAR(255)`. Keep `venue_address` as the Google-formatted display string. **No `timezone` column** (D-3). *(Local re-seed via `docker compose down -v`; prod is a hand-applied `ALTER TABLE` — note it for Phase-7 deploy.)*
@@ -184,4 +191,5 @@ _Append one entry per working session: date, phase touched, what shipped, decisi
 
 - **2026-07-06 — Plan created.** Scope set to Tracks A/B/D (not C). Ripple map + phase breakdown drafted from a full read of the submit/edit/admin/versioning/read code.
 - **2026-07-06 — Owner decisions locked** (§2/§5): Google provider; Google-validated-address-only (coords captured from the selection, no separate geocode); no timezone (static note only); nullable cols/no backfill; server-side enforcement in EP-2. Plan updated throughout.
-- **2026-07-06 — EP-1 shipped + verified** (see the EP-1 round notes). A1 map + directions, B1 country dropdown, B2 submitter-type dropdown, B3 server-side URL validation (+3 tests, 72 green), B4 description counter, B5 local-time note. No schema change, no new deps. **Next: EP-2** once the owner provisions `NEXT_PUBLIC_MAPS_BROWSER_KEY`.
+- **2026-07-06 — EP-1 shipped + verified** (see the EP-1 round notes). A1 map + directions, B1 country dropdown, B2 submitter-type dropdown, B3 server-side URL validation (+3 tests, 72 green), B4 description counter, B5 local-time note. No schema change, no new deps. Committed `3173b90`.
+- **2026-07-07 — EP-2 prereq partly met + EP-1 handed to owner for verification.** Owner added `NEXT_PUBLIC_MAPS_BROWSER_KEY` on Vercel (still needs the local `.env.local` / compose copy for local EP-2 dev). EP-1 owner-verification checklist added above. **Next: EP-2** (Google Places Autocomplete + coordinate capture + schema change) — see the handover prompt issued this session.
