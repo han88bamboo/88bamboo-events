@@ -15,6 +15,7 @@ import { adminService } from '@/core/services/admin';
 import { adminAuth } from '@/core/services/adminAuth';
 import { formatDateTime, formatFee } from '@/components/views/admin/adminFormat';
 import AdminEditModal from '@/components/views/admin/AdminEditModal';
+import AdminLocationMap from '@/components/views/admin/AdminLocationMap';
 import ConversationPanel from '@/components/views/admin/ConversationPanel';
 
 function StatusBadge({ status, isPast }) {
@@ -154,6 +155,10 @@ function ListingRow({ item, token, onUnpublish, onEdit, onMessage, busy }) {
                 {showHistory ? 'Hide' : 'View'} history ({item.version_count})
               </button>
             </div>
+
+            {/* Location preview (EP-4): collapsed by default — the map iframe only
+                mounts when the admin clicks "Show map", so a long list stays light. */}
+            <AdminLocationMap item={item} />
 
             {showHistory && (
               <div className="mt-3">

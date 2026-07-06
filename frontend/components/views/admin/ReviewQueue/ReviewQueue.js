@@ -13,6 +13,7 @@ import { useRouter } from 'next/router';
 import { adminService } from '@/core/services/admin';
 import { adminAuth } from '@/core/services/adminAuth';
 import AdminEditModal from '@/components/views/admin/AdminEditModal';
+import AdminLocationMap from '@/components/views/admin/AdminLocationMap';
 import ConversationPanel from '@/components/views/admin/ConversationPanel';
 
 function formatDateTime(value) {
@@ -108,6 +109,10 @@ function PendingCard({ item, onApprove, onReject, onEdit, onMessage, busy }) {
               <dt className="col-sm-3">Capture by</dt>
               <dd className="col-sm-9">{formatDateTime(item.capture_before)}</dd>
             </dl>
+
+            {/* Exact-pin location preview (EP-4) so the reviewer sees WHERE the
+                event is before approving. Open by default — few pending items. */}
+            <AdminLocationMap item={item} initialOpen />
 
             {item.description && (
               <p className="card-text small text-muted">{item.description}</p>
