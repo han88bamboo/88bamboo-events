@@ -16,6 +16,7 @@ DEFAULT_MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB
 MAX_NAME_LEN = 500
 MAX_SHORT_LEN = 255          # emails, country, city, format
 MAX_VENUE_NAME_LEN = 500
+MAX_URL_LEN = 2048           # event link — TEXT column, capped to a sane URL length
 
 # The honeypot field: a real browser never fills it (it is visually hidden and
 # tab-skipped). Any non-empty value marks the submitter as a bot (plan §8).
@@ -30,6 +31,24 @@ def _looks_like_email(value):
     local, _, domain = value.partition("@")
     return bool(local) and "." in domain and not domain.startswith(".") \
         and not domain.endswith(".")
+
+
+def _looks_like_url(value):
+    """Cheap structural URL check — an http(s) scheme and a dotted host. Not
+    RFC-complete on purpose (same spirit as _looks_like_email); it just rejects
+    the obvious junk that the browser's type="url" lets through (e.g. a bare
+    'myevent' or a 'javascript:' scheme)."""
+    if not value:
+        return False
+    v = value.strip()
+    lower = v.lower()
+    if not (lower.startswith("http://") or lower.startswith("https://")):
+        return False
+    # Host is everything after '://' up to the first '/', '?' or '#'.
+    rest = v.split("://", 1)[1]
+    host = rest.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
+    return bool(host) and "." in host and not host.startswith(".") \
+        and not host.endswith(".")
 
 
 def parse_datetime(value):
@@ -140,6 +159,12 @@ def validate_submission(data, allowed_categories, allowed_formats):
     elif event_format not in allowed_formats:
         errors.append("Event format is not a recognised option.")
 
+    # Event link is optional; when supplied it must be a real http(s) URL (the
+    # browser's type="url" is lenient — a bare word passes it). Length-capped too.
+    link = _text("link", MAX_URL_LEN)
+    if link and not _looks_like_url(link):
+        errors.append("Event link must be a valid URL starting with http:// or https://.")
+
     # Multi-select drink categories: at least one, all from the taxonomy.
     raw_categories = data.get("drink_categories") or []
     categories = [c.strip() for c in raw_categories if c and c.strip()]
@@ -163,7 +188,7 @@ def validate_submission(data, allowed_categories, allowed_formats):
         "country": country,
         "city": city,
         "description": _text("description") or None,
-        "link": _text("link") or None,
+        "link": link or None,
         "event_format": event_format,
         "drink_categories": categories,
         "submission_type": _text("submission_type", MAX_SHORT_LEN) or None,

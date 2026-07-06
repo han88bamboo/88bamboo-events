@@ -104,6 +104,37 @@ class TestValidateSubmission(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertEqual(cleaned["drink_categories"], ["Whisky", "Wine"])
 
+    def test_link_optional_when_blank(self):
+        # No link supplied → no error, cleaned link is None.
+        cleaned, errors = validate_submission(
+            _valid_form(link=""), CATEGORIES, FORMATS
+        )
+        self.assertEqual(errors, [])
+        self.assertIsNone(cleaned["link"])
+
+    def test_valid_links_accepted(self):
+        for url in (
+            "https://example.com/event",
+            "http://sub.example.co.uk/path?x=1#frag",
+        ):
+            _, errors = validate_submission(
+                _valid_form(link=url), CATEGORIES, FORMATS
+            )
+            self.assertFalse(
+                any("link" in e.lower() for e in errors), msg=f"{url}: {errors}"
+            )
+
+    def test_invalid_links_rejected(self):
+        # A bare word, a missing scheme, a non-http scheme, and a dotless host —
+        # all pass the browser's lenient type="url" but must fail server-side.
+        for url in ("myevent", "example.com", "javascript:alert(1)", "https://localhost"):
+            _, errors = validate_submission(
+                _valid_form(link=url), CATEGORIES, FORMATS
+            )
+            self.assertTrue(
+                any("valid url" in e.lower() for e in errors), msg=f"{url} not rejected"
+            )
+
 
 class TestValidateImage(unittest.TestCase):
     def test_accepts_valid_types(self):

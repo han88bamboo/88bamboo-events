@@ -9,6 +9,7 @@
 import { useEffect, useState } from 'react';
 
 import { submissionsService } from '@/core/services/submissions';
+import { COUNTRIES, SUBMITTER_TYPES, withLegacyValue } from '@/core/constants/formOptions';
 import CheckoutStep from './CheckoutStep';
 
 // Mirror the server's image rules for fast client-side feedback (the server is
@@ -342,6 +343,10 @@ function SubmitEvent({ taxonomy, prefill }) {
             />
           </div>
         </div>
+        <p className="form-text mt-0 mb-3">
+          Enter the times in the event&apos;s own local time — that&apos;s how they
+          appear on the listing.
+        </p>
 
         <div className="mb-3">
           <label className="form-label" htmlFor="venue_name">
@@ -373,13 +378,20 @@ function SubmitEvent({ taxonomy, prefill }) {
             <label className="form-label" htmlFor="country">
               Country <span className="text-danger">*</span>
             </label>
-            <input
+            <select
               id="country"
-              className="form-control"
+              className="form-select"
               value={fields.country}
               onChange={setField('country')}
               required
-            />
+            >
+              <option value="">Choose…</option>
+              {withLegacyValue(COUNTRIES, fields.country).map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="col-md-6 mb-3">
             <label className="form-label" htmlFor="city">
@@ -448,6 +460,10 @@ function SubmitEvent({ taxonomy, prefill }) {
             value={fields.description}
             onChange={setField('description')}
           />
+          <div className="form-text d-flex justify-content-between">
+            <span>Tell attendees what to expect — drinks, hosts, what&apos;s included.</span>
+            <span>{fields.description.length} characters</span>
+          </div>
         </div>
 
         <div className="mb-3">
@@ -468,14 +484,19 @@ function SubmitEvent({ taxonomy, prefill }) {
           <label className="form-label" htmlFor="submission_type">
             Submitter type
           </label>
-          <input
+          <select
             id="submission_type"
-            className="form-control"
+            className="form-select"
             value={fields.submission_type}
             onChange={setField('submission_type')}
-            placeholder="e.g. bar, brand, agency"
-            maxLength={255}
-          />
+          >
+            <option value="">Choose…</option>
+            {withLegacyValue(SUBMITTER_TYPES, fields.submission_type).map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="mb-4">

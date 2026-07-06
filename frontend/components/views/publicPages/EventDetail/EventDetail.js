@@ -16,6 +16,18 @@ function EventDetail({ event }) {
   const where = [event.venue_name, event.venue_address, event.city, event.country]
     .filter(Boolean)
     .join(', ');
+  // The map query drops the venue NAME (a name alone geocodes poorly) and uses the
+  // address parts. Keyless Google embed (`output=embed`) — no API key needed; EP-2
+  // will swap this for exact lat,lng coordinates once they are captured at submit.
+  const mapQuery = [event.venue_address, event.city, event.country]
+    .filter(Boolean)
+    .join(', ');
+  const mapSrc = mapQuery
+    ? `https://www.google.com/maps?q=${encodeURIComponent(mapQuery)}&output=embed`
+    : null;
+  const directionsUrl = mapQuery
+    ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(mapQuery)}`
+    : null;
 
   return (
     <main className="article-measure py-5">
@@ -54,6 +66,7 @@ function EventDetail({ event }) {
         <dt className="col-sm-3">When</dt>
         <dd className="col-sm-9">
           {formatDateRange(event.start_datetime, event.end_datetime)}
+          <span className="d-block text-muted small">Local time at the event location.</span>
         </dd>
 
         {where && (
@@ -72,6 +85,29 @@ function EventDetail({ event }) {
           </>
         )}
       </dl>
+
+      {/* Location map (A1): a keyless Google embed placing the event by its address
+          string, plus a "Get directions" link. Only shown when we have an address
+          to place. EP-2 upgrades this to an exact pin from stored coordinates. */}
+      {mapSrc && (
+        <div className="mb-4">
+          <div className="ratio ratio-16x9 rounded overflow-hidden border">
+            <iframe
+              title={`Map showing ${event.venue_name || where}`}
+              src={mapSrc}
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+              style={{ border: 0 }}
+              allowFullScreen
+            />
+          </div>
+          <p className="mt-2 mb-0">
+            <a href={directionsUrl} target="_blank" rel="noopener noreferrer">
+              Get directions ↗
+            </a>
+          </p>
+        </div>
+      )}
 
       {event.description && (
         <div className="bamboo-prose mb-4" style={{ whiteSpace: 'pre-wrap' }}>

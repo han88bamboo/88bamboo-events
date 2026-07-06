@@ -15,6 +15,8 @@
 // "saved/published" message instead).
 import { useState } from 'react';
 
+import { COUNTRIES, SUBMITTER_TYPES, withLegacyValue } from '@/core/constants/formOptions';
+
 // datetime-local wants 'YYYY-MM-DDTHH:MM'; the API returns full ISO strings.
 const toLocalInput = (iso) => (iso ? String(iso).slice(0, 16) : '');
 
@@ -163,7 +165,12 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
         <div className="row">
           <div className="col-md-6 mb-3">
             <label className="form-label" htmlFor="country">Country *</label>
-            <input id="country" className="form-control" value={fields.country} onChange={setField('country')} required />
+            <select id="country" className="form-select" value={fields.country} onChange={setField('country')} required>
+              <option value="">Choose…</option>
+              {withLegacyValue(COUNTRIES, fields.country).map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
           </div>
           <div className="col-md-6 mb-3">
             <label className="form-label" htmlFor="city">City *</label>
@@ -209,7 +216,12 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
         </div>
         <div className="mb-4">
           <label className="form-label" htmlFor="submission_type">Submitter type</label>
-          <input id="submission_type" className="form-control" value={fields.submission_type} onChange={setField('submission_type')} maxLength={255} placeholder="e.g. bar, brand, agency" />
+          <select id="submission_type" className="form-select" value={fields.submission_type} onChange={setField('submission_type')}>
+            <option value="">Choose…</option>
+            {withLegacyValue(SUBMITTER_TYPES, fields.submission_type).map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
         </div>
 
         {extras}
