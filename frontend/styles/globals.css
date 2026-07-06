@@ -258,6 +258,13 @@ a:focus {
   color: #ffffff;
   text-decoration: underline;
 }
+@media (max-width: 749px) {
+  /* Store renders .announcement-bar__message at 0.75em (~12px) on mobile. */
+  .bamboo-marquee a,
+  .bamboo-marquee span {
+    font-size: 12px;
+  }
+}
 
 /* Yellow reviews bar (reference §6). Full-width, left-aligned, padding 13px 50px
    (measured live: .reviews-bar padding + .reviews-bar-words 95%/75%). NOT boxed
@@ -450,36 +457,83 @@ a:focus {
   white-space: normal;
 }
 
-/* Mobile off-canvas drawer accordion. */
-.bamboo-drawer-link {
-  display: block;
-  padding: 12px 4px;
-  color: var(--bamboo-text);
-  font-family: var(--font-heading);
-  text-decoration: none;
+/* Mobile drop-down menu (reference §7). A FULL-WIDTH panel that drops from under
+   the header with a multi-level drill-down — matching the store's mobile nav
+   (which slides down + drills sideways), not a side off-canvas drawer. */
+.bamboo-mobile-menu {
+  display: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  background: #ffffff;
   border-bottom: 1px solid var(--bamboo-border);
-  background: transparent;
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.08);
+  max-height: calc(100vh - 110px);
+  overflow-y: auto;
+  z-index: 1029;
+}
+.bamboo-mobile-menu.is-open {
+  display: block;
+}
+/* Each drill level slides in from the right, like the store's drill-down. */
+.bamboo-mm__panel {
+  animation: bambooMMSlide 240ms cubic-bezier(0.29, 0.63, 0.44, 1);
+}
+@keyframes bambooMMSlide {
+  from {
+    transform: translateX(14%);
+    opacity: 0.35;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+/* Rows: store metrics — 15px/30px padding, 16px, hairline dividers. */
+.bamboo-mm__row,
+.bamboo-mm__back {
+  display: flex;
+  align-items: center;
   width: 100%;
+  padding: 15px 30px;
+  font-family: var(--font-heading);
+  font-size: 16px;
+  color: var(--bamboo-text);
+  text-decoration: none;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--bamboo-border);
   text-align: left;
 }
-.bamboo-drawer-link--active {
+.bamboo-mm__row--parent {
+  justify-content: space-between;
+}
+.bamboo-mm__row--active {
   color: var(--bamboo-green-link);
   font-weight: 700;
 }
-.bamboo-drawer-sublink {
-  display: block;
-  padding: 8px 4px 8px 18px;
-  color: var(--bamboo-text);
-  font-family: var(--font-body);
-  font-size: 15px;
-  text-decoration: none;
-  border-bottom: 1px solid var(--bamboo-border);
-}
-/* Mega-menu column headers, shown inline (bold) within the mobile accordion. */
-.bamboo-drawer-sublink--head {
-  font-family: var(--font-heading);
+/* Back bar: subtle fill + a left-pointing arrow, returns up one level. */
+.bamboo-mm__back {
+  gap: 12px;
+  background: #f7f7f5;
   font-weight: 700;
-  padding-left: 4px;
+}
+.bamboo-mm__back-arrow,
+.bamboo-mm__chevron {
+  display: inline-block;
+  width: 0.5em;
+  height: 0.5em;
+  border: solid currentColor;
+  border-width: 0 1.5px 1.5px 0;
+  flex-shrink: 0;
+}
+.bamboo-mm__chevron {
+  transform: rotate(-45deg); /* points right */
+  opacity: 0.55;
+}
+.bamboo-mm__back-arrow {
+  transform: rotate(135deg); /* points left */
 }
 
 /* ============================================================================

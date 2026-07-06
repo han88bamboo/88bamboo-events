@@ -57,7 +57,8 @@ Legend: `[ ]` todo · `[x]` done · `[~]` partial.
 - [x] `NavBar.js` — full store-menu replica (logo-left, inline nav + dropdowns) + Events button.
 - [x] `AnnouncementMarquee.js` — static "Just In" brand strip.
 - [x] `ReviewsBar.js` — yellow reviews strip with store review links.
-- [x] `MobileNavDrawer.js` — off-canvas hamburger drawer (nested accordion menu).
+- [x] `MobileNavDrawer.js` — full-width drop-down mobile menu with the store's
+  multi-level drill-down (Round 4; was an off-canvas accordion).
 - [x] `Main.js` — stack: marquee → nav → reviews bar → `main-content` → footer.
 - [x] `FooterBar.js` — exact storefront footer replica (non-live newsletter).
 
@@ -537,6 +538,61 @@ tab remains (it's still the app's own section), but as a plain nav item, not a b
   closed navbar.
 
 Files touched (follow-ups): `styles/globals.css`.
+
+---
+
+## Parity Gap Audit — Round 4 (2026-07-06) — Mobile navbar
+
+Owner asked to match the **mobile** navbar behaviour to the store (excluding the SGD
+currency selector). Reference behaviour parsed live from `theme.scss.css` +
+`#MobileNav` markup. Paths relative to `frontend/`.
+
+**Gap H1 🔴 — Hamburger menu opened the wrong way (off-canvas accordion vs the
+store's full-width drill-down).**
+- Reference: the mobile nav is a **full-width panel that drops down under the header**
+  (`.mobile-nav-wrapper`), with a **multi-level drill-down** — tap a section → it
+  slides to a sub-panel (with a back button) of its groups; tap a group → its links
+  (`.sub-nav--is-open .mobile-nav { translate3d(-100%…) }`, `.third-nav--is-open …
+  translate3d(-200%…)`, `.mobile-nav__return-btn`). Rows: `padding:15px 30px;
+  font-size:16px`. Hamburger toggles to an X (`icon-hamburger` ↔ `icon-close`).
+- Ours (before): `MobileNavDrawer.js` was an **85%-width left off-canvas** drawer with
+  **accordion** (expand-in-place) submenus and a static "Browse events" button — a
+  different open pattern entirely.
+- Fix: rebuilt `MobileNavDrawer.js` as a full-width drop-down (`.bamboo-mobile-menu`,
+  `position:absolute; top:100%` of the sticky header) with a **drill-down stack** built
+  from `STORE_MENU` (sections → groups → links; a drilled section repeats its own page
+  link at the top, like the store). `NavBar.js` hamburger now **toggles** and swaps
+  `bi-list` ↔ `bi-x-lg`. Verified on a production server (the dev server's Next-16
+  overlay bug breaks hydration): click opens a **full-width** panel flush under the
+  header (top 126 ≈ header bottom 127), X icon shows, Editorial → 5 group rows → "The
+  Bamboo Post" → self-link + 4 child links, back button pops one level.
+
+**Gap H2 🔴 — Marquee text too large on mobile.**
+- Reference: `.announcement-bar__message` is `0.75em` (~12px) on mobile, `0.875em`
+  (~14px) ≥750px. Ours was a flat 14px.
+- Fix: `globals.css` — `@media (max-width:749px)` sets the marquee to 12px. Verified
+  computed: 12px mobile / 14px desktop.
+
+**Gap H3 🟡 — Search icon on the mobile header.** *(Owner decision 2026-07-06: OMIT.)*
+- Reference mobile header right side is `[search] [SGD] [hamburger]`. SGD was already
+  excluded (Gap C2). Asked the owner about the search magnifier; owner chose to **omit**
+  it, so the events mobile header stays **logo + hamburger** (Decision C2 preserved). No
+  change.
+
+### Round-4 fixes — APPLIED & verified 2026-07-06
+
+Verified on a production build/server at 375px (dev server unusable — Next 16
+`handleStaticIndicator` overlay bug breaks hydration there):
+- **H1** — full-width drop-down drill-down menu; hamburger ↔ X; 3-level drill
+  (section → group → links) with self-link + back button; store links absolute,
+  Events (active) internal. Desktop re-checked: mega-menus + sticky + Events-active all
+  still correct; mobile menu hidden ≥992px.
+- **H2** — marquee 12px mobile / 14px desktop.
+- **H3** — omitted per owner.
+
+Files touched: `components/layouts/Main/components/{MobileNavDrawer.js, NavBar.js}`,
+`styles/globals.css`. `next build` passes. (Old `.bamboo-drawer-*` off-canvas CSS +
+markup removed as now-unused.)
 
 ---
 

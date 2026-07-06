@@ -98,15 +98,18 @@ const NavBar = () => {
           </ul>
         </nav>
 
-        {/* Right side: hamburger (mobile only). */}
+        {/* Right side: hamburger (mobile only) — toggles the drop-down menu and
+            swaps to an X while open, like the store's mobile nav. */}
         <div className="d-flex align-items-center gap-2 ms-auto flex-shrink-0">
           <button
             type="button"
             className="btn bamboo-nav-link d-lg-none fs-3 p-1 lh-1"
-            aria-label="Open menu"
-            onClick={() => setDrawerOpen(true)}
+            aria-label={drawerOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={drawerOpen}
+            aria-controls="BambooMobileMenu"
+            onClick={() => setDrawerOpen((o) => !o)}
           >
-            <i className="bi bi-list" />
+            <i className={`bi ${drawerOpen ? 'bi-x-lg' : 'bi-list'}`} />
           </button>
         </div>
       </div>

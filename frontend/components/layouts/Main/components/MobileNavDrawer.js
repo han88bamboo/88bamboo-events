@@ -1,120 +1,93 @@
-// MobileNavDrawer — off-canvas mobile navigation (reference §7). A slide-in panel
-// with the full store menu as collapsible accordions plus the Events CTA. Built
-// as a self-contained controlled React component (no Bootstrap-JS offcanvas init)
-// so it works regardless of when the Bootstrap bundle finishes loading.
-import { useState } from 'react';
+// MobileNavDrawer — the mobile menu, rebuilt to open the same way as the
+// 88bamboo.co storefront: a FULL-WIDTH panel that drops down under the header
+// (not a side off-canvas), with a multi-level DRILL-DOWN — tapping a section
+// slides to a sub-panel (with a back button) showing its groups, and tapping a
+// group slides to its links. Mirrors the store's mobile-nav-wrapper behaviour
+// without porting any theme JS. Controlled by NavBar (open / onClose); the
+// hamburger there toggles it and swaps to an X.
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
 import { STORE_MENU, storeUrl } from '../menuData';
 
-const MobileNavDrawer = ({ open, onClose }) => {
-  const [expanded, setExpanded] = useState(null); // label of the open accordion
+// Normalise STORE_MENU (+ the events-native Events tab) into a drill-down tree.
+// A node with `children` is drillable; a node with only `href` is a leaf link.
+const leaf = (it) => ({ label: it.label, href: it.href });
+const groupNode = (g) =>
+  g.items && g.items.length
+    ? { label: g.label, href: g.href, children: g.items.map(leaf) }
+    : { label: g.label, href: g.href };
+const topNode = (e) => {
+  if (e.groups) return { label: e.label, children: e.groups.map(groupNode) };
+  if (e.items) return { label: e.label, children: e.items.map(leaf) };
+  return { label: e.label, href: e.href };
+};
+const ROOT_NODES = [
+  ...STORE_MENU.map(topNode),
+  { label: 'Events', href: '/', internal: true, active: true },
+];
 
-  const toggle = (label) => setExpanded((cur) => (cur === label ? null : label));
+const MobileNavDrawer = ({ open, onClose }) => {
+  const [trail, setTrail] = useState([]); // stack of drilled-into nodes
+
+  // Always return to the root when the menu is dismissed.
+  useEffect(() => {
+    if (!open) setTrail([]);
+  }, [open]);
+
+  const current = trail[trail.length - 1] || null;
+  // A drilled section repeats its own page link (if it has one) at the top, then
+  // its children — exactly like the store's mobile drill panels.
+  const items = current
+    ? [...(current.href ? [{ ...current, self: true }] : []), ...current.children]
+    : ROOT_NODES;
+
+  const drillInto = (node) => setTrail((t) => [...t, node]);
+  const back = () => setTrail((t) => t.slice(0, -1));
+
+  const renderRow = (node, i) => {
+    const drillable = node.children && node.children.length && !node.self;
+    if (drillable) {
+      return (
+        <button
+          type="button"
+          key={node.label + i}
+          className="bamboo-mm__row bamboo-mm__row--parent"
+          onClick={() => drillInto(node)}
+        >
+          <span>{node.label}</span>
+          <span className="bamboo-mm__chevron" aria-hidden="true" />
+        </button>
+      );
+    }
+    const cls = `bamboo-mm__row bamboo-mm__row--link${node.active ? ' bamboo-mm__row--active' : ''}`;
+    if (node.internal) {
+      return (
+        <Link key={node.label + i} href={node.href} className={cls} onClick={onClose}>
+          {node.label}
+        </Link>
+      );
+    }
+    return (
+      <a key={node.label + i} href={storeUrl(node.href)} className={cls} onClick={onClose}>
+        {node.label}
+      </a>
+    );
+  };
 
   return (
-    <>
-      {/* Dimmed backdrop */}
-      <div
-        role="presentation"
-        onClick={onClose}
-        style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.4)',
-          opacity: open ? 1 : 0,
-          visibility: open ? 'visible' : 'hidden',
-          transition: 'opacity 0.25s ease, visibility 0.25s ease',
-          zIndex: 1045,
-        }}
-      />
-      {/* Panel */}
-      <div
-        aria-hidden={!open}
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          bottom: 0,
-          width: '85%',
-          maxWidth: 340,
-          background: '#fff',
-          transform: open ? 'translateX(0)' : 'translateX(-100%)',
-          transition: 'transform 0.25s ease',
-          zIndex: 1046,
-          overflowY: 'auto',
-          padding: '16px 20px',
-        }}
-      >
-        <div className="d-flex justify-content-between align-items-center mb-2">
-          <span className="bamboo-nav-link" style={{ fontSize: 18 }}>Menu</span>
-          <button
-            type="button"
-            className="btn-close"
-            aria-label="Close menu"
-            onClick={onClose}
-          />
-        </div>
-
-        {/* Events — the app's own section, active here. A normal nav item. */}
-        <Link
-          href="/"
-          className="bamboo-drawer-link bamboo-drawer-link--active"
-          onClick={onClose}
-        >
-          Events
-        </Link>
-
-        {STORE_MENU.map((entry) => {
-          // Mega-menu and plain-dropdown parents both collapse to one accordion;
-          // groups are flattened so the mega-menu's column headers appear inline
-          // (as bold links) followed by their child links.
-          const children = entry.groups
-            ? entry.groups.flatMap((g) => [{ ...g, isHead: true }, ...g.items])
-            : entry.items;
-
-          if (children) {
-            return (
-              <div key={entry.label}>
-                <button
-                  type="button"
-                  className="bamboo-drawer-link d-flex justify-content-between align-items-center"
-                  onClick={() => toggle(entry.label)}
-                  aria-expanded={expanded === entry.label}
-                >
-                  <span>{entry.label}</span>
-                  <i className={`bi ${expanded === entry.label ? 'bi-chevron-up' : 'bi-chevron-down'}`} />
-                </button>
-                {expanded === entry.label && (
-                  <div>
-                    {children.map((it) => (
-                      <a
-                        key={it.label + it.href}
-                        href={storeUrl(it.href)}
-                        className={`bamboo-drawer-sublink${it.isHead ? ' bamboo-drawer-sublink--head' : ''}`}
-                        onClick={onClose}
-                      >
-                        {it.label}
-                      </a>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          }
-          return (
-            <a
-              key={entry.label}
-              href={storeUrl(entry.href)}
-              className="bamboo-drawer-link"
-              onClick={onClose}
-            >
-              {entry.label}
-            </a>
-          );
-        })}
+    <div id="BambooMobileMenu" className={`bamboo-mobile-menu d-lg-none${open ? ' is-open' : ''}`} aria-hidden={!open}>
+      {current && (
+        <button type="button" className="bamboo-mm__back" onClick={back}>
+          <span className="bamboo-mm__back-arrow" aria-hidden="true" />
+          <span>{current.label}</span>
+        </button>
+      )}
+      {/* keyed on depth so each drill remounts and slides in */}
+      <div className="bamboo-mm__panel" key={trail.length}>
+        {items.map(renderRow)}
       </div>
-    </>
+    </div>
   );
 };
 
