@@ -288,7 +288,7 @@ a:focus {
 }
 .bamboo-reviews-bar a {
   color: var(--bamboo-text);
-  font-weight: 700;
+  font-weight: 400;
   text-decoration: underline;
 }
 .bamboo-reviews-bar a:hover {
