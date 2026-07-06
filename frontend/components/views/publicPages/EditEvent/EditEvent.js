@@ -21,6 +21,23 @@ import LocationFields from '@/components/common/LocationFields';
 // datetime-local wants 'YYYY-MM-DDTHH:MM'; the API returns full ISO strings.
 const toLocalInput = (iso) => (iso ? String(iso).slice(0, 16) : '');
 
+// Pure: build the per-field error map (D2, presentational only — the shared
+// validate_submission on the server stays the authority). Mirrors SubmitEvent
+// minus the image (edits carry the image forward).
+function buildFieldErrors(fields, selectedCategories) {
+  const fe = {};
+  if (!fields.name.trim()) fe.name = 'Event name is required.';
+  if (!fields.submitter_email.trim()) fe.submitter_email = 'Your email is required.';
+  if (!fields.start_datetime) fe.start_datetime = 'Start date/time is required.';
+  if (!fields.end_datetime) fe.end_datetime = 'End date/time is required.';
+  if (!fields.country.trim()) fe.country = 'Country is required.';
+  if (!fields.city.trim()) fe.city = 'City is required.';
+  if (!fields.event_format) fe.event_format = 'Event format is required.';
+  if (selectedCategories.length === 0)
+    fe.drink_categories = 'Select at least one drink category.';
+  return fe;
+}
+
 function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras, successNode }) {
   const drinkCategories = taxonomy?.drink_categories || [];
   const eventFormats = taxonomy?.event_formats || [];
@@ -50,27 +67,51 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
   });
   const [selectedCategories, setSelectedCategories] = useState(src.drink_categories || []);
   const [submitting, setSubmitting] = useState(false);
-  const [errors, setErrors] = useState([]);
+  const [errors, setErrors] = useState([]); // server/network errors (top alert)
   const [locationErrors, setLocationErrors] = useState([]); // from LocationFields
+  const [touched, setTouched] = useState({});
+  const [locationTouched, setLocationTouched] = useState(false);
   const [done, setDone] = useState(false);
+
+  // Recomputed each render from the single source of state (D2, pure).
+  const fieldErrors = buildFieldErrors(fields, selectedCategories);
+  const locationInvalid =
+    !!fieldErrors.country || !!fieldErrors.city || locationErrors.length > 0;
 
   const setField = (key) => (e) =>
     setFields((prev) => ({ ...prev, [key]: e.target.value }));
 
+  const blur = (key) => () => setTouched((t) => ({ ...t, [key]: true }));
+
   const patchFields = (patch) => setFields((prev) => ({ ...prev, ...patch }));
 
-  const toggleCategory = (label) =>
+  const toggleCategory = (label) => {
     setSelectedCategories((prev) =>
       prev.includes(label) ? prev.filter((c) => c !== label) : [...prev, label],
     );
+    setTouched((t) => ({ ...t, drink_categories: true }));
+  };
+
+  const FieldError = ({ name }) =>
+    touched[name] && fieldErrors[name] ? (
+      <div className="text-danger small mt-1">{fieldErrors[name]}</div>
+    ) : null;
+
+  const invalidClass = (name) =>
+    touched[name] && fieldErrors[name] ? ' is-invalid' : '';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrors([]);
-    // Client mirror of the server rules (address must be selected, region
-    // required) surfaced by LocationFields.
-    if (locationErrors.length) {
-      setErrors(locationErrors);
+    // Client mirror of the required rules + LocationFields' own errors, shown
+    // inline; reveal them and bail if anything is still invalid (the server
+    // re-validates regardless).
+    if (Object.keys(fieldErrors).length || locationInvalid) {
+      setTouched((t) => ({
+        ...t,
+        ...Object.fromEntries(Object.keys(fieldErrors).map((k) => [k, true])),
+      }));
+      setLocationTouched(true);
       return;
     }
     setSubmitting(true);
@@ -145,13 +186,15 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
       <form onSubmit={handleSubmit} noValidate>
         <div className="mb-3">
           <label className="form-label" htmlFor="name">Event name *</label>
-          <input id="name" className="form-control" value={fields.name} onChange={setField('name')} maxLength={500} required />
+          <input id="name" className={`form-control${invalidClass('name')}`} value={fields.name} onChange={setField('name')} onBlur={blur('name')} maxLength={500} required />
+          <FieldError name="name" />
         </div>
 
         <div className="row">
           <div className="col-md-6 mb-3">
             <label className="form-label" htmlFor="submitter_email">Your email *</label>
-            <input id="submitter_email" type="email" className="form-control" value={fields.submitter_email} onChange={setField('submitter_email')} required />
+            <input id="submitter_email" type="email" className={`form-control${invalidClass('submitter_email')}`} value={fields.submitter_email} onChange={setField('submitter_email')} onBlur={blur('submitter_email')} required />
+            <FieldError name="submitter_email" />
           </div>
           <div className="col-md-6 mb-3">
             <label className="form-label" htmlFor="contact_email">Public contact email</label>
@@ -162,30 +205,48 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
         <div className="row">
           <div className="col-md-6 mb-3">
             <label className="form-label" htmlFor="start_datetime">Starts *</label>
-            <input id="start_datetime" type="datetime-local" className="form-control" value={fields.start_datetime} onChange={setField('start_datetime')} required />
+            <input id="start_datetime" type="datetime-local" className={`form-control${invalidClass('start_datetime')}`} value={fields.start_datetime} onChange={setField('start_datetime')} onBlur={blur('start_datetime')} required />
+            <FieldError name="start_datetime" />
           </div>
           <div className="col-md-6 mb-3">
             <label className="form-label" htmlFor="end_datetime">Ends *</label>
-            <input id="end_datetime" type="datetime-local" className="form-control" value={fields.end_datetime} onChange={setField('end_datetime')} required />
+            <input id="end_datetime" type="datetime-local" className={`form-control${invalidClass('end_datetime')}`} value={fields.end_datetime} onChange={setField('end_datetime')} onBlur={blur('end_datetime')} required />
+            <FieldError name="end_datetime" />
           </div>
         </div>
 
         {/* Venue name + Google-validated address + country + dependent region +
-            city (EP-2), shared with the submit form via LocationFields. */}
-        <LocationFields
-          values={fields}
-          onChange={patchFields}
-          onValidationChange={setLocationErrors}
-        />
+            city (EP-2), shared with the submit form via LocationFields. Its own
+            reported errors + country/city required are shown inline below (D2). */}
+        {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
+        <div onBlur={() => setLocationTouched(true)}>
+          <LocationFields
+            values={fields}
+            onChange={patchFields}
+            onValidationChange={setLocationErrors}
+          />
+        </div>
+        {locationTouched && locationInvalid && (
+          <div className="text-danger small mb-3">
+            <ul className="mb-0 ps-3">
+              {fieldErrors.country && <li>{fieldErrors.country}</li>}
+              {fieldErrors.city && <li>{fieldErrors.city}</li>}
+              {locationErrors.map((m, i) => (
+                <li key={i}>{m}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="mb-3">
           <label className="form-label" htmlFor="event_format">Event format *</label>
-          <select id="event_format" className="form-select" value={fields.event_format} onChange={setField('event_format')} required>
+          <select id="event_format" className={`form-select${invalidClass('event_format')}`} value={fields.event_format} onChange={setField('event_format')} onBlur={blur('event_format')} required>
             <option value="">Choose…</option>
             {eventFormats.map((f) => (
               <option key={f.id} value={f.label}>{f.label}</option>
             ))}
           </select>
+          <FieldError name="event_format" />
         </div>
 
         <div className="mb-3">
@@ -204,6 +265,7 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
               </div>
             ))}
           </div>
+          <FieldError name="drink_categories" />
         </div>
 
         <div className="mb-3">
