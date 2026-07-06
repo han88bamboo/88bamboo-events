@@ -288,8 +288,12 @@ a:focus {
 
 /* Header / nav (reference §6). Logo left, white bg, hairline bottom border.
    The store header is FULL-WIDTH with padding 0 30px (measured live — it is NOT
-   inside .page-width), so the logo sits flush-left on any viewport. */
+   inside .page-width), so the logo sits flush-left on any viewport. It is also
+   sticky: on scroll the header stays pinned to the top (like the store). */
 .bamboo-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 1030;
   background-color: var(--bamboo-bg);
   border-bottom: 1px solid var(--bamboo-border);
 }
@@ -307,8 +311,37 @@ a:focus {
   max-width: 70px;
   height: auto;
 }
-/* Replace Bootstrap's solid triangle caret with a thin chevron (reference §6). */
-.bamboo-navbar .dropdown-toggle::after {
+
+/* Top-level nav links. The store draws the hover/active state as an underline on
+   an inner label span (.site-nav__label: border-bottom transparent → #1A6132),
+   NOT the whole button, and the active section is bold + green (measured live). */
+.bamboo-nav-link {
+  display: inline-flex;
+  align-items: center;
+  color: var(--bamboo-text);
+  font-family: var(--font-heading);
+  font-weight: 400;
+  text-decoration: none;
+  background: transparent;
+  border: 0;
+}
+.bamboo-nav-link__label {
+  border-bottom: 1px solid transparent;
+}
+.bamboo-nav-link:hover .bamboo-nav-link__label,
+.bamboo-nav-link:focus .bamboo-nav-link__label {
+  color: var(--bamboo-green-link);
+  border-bottom-color: var(--bamboo-green-link);
+}
+/* Current section (Events, here) — underlined + bold + green, like the store. */
+.bamboo-nav-link--active .bamboo-nav-link__label {
+  color: var(--bamboo-green-link);
+  font-weight: 700;
+  border-bottom-color: var(--bamboo-green-link);
+}
+
+/* Thin chevron caret on dropdown/mega-menu parents (reference §6). */
+.bamboo-caret {
   display: inline-block;
   width: 0.42em;
   height: 0.42em;
@@ -317,36 +350,88 @@ a:focus {
   border-width: 0 1.5px 1.5px 0;
   transform: translateY(-2px) rotate(45deg);
   vertical-align: middle;
-  content: "";
 }
-.bamboo-nav-link {
+
+/* --- Dropdowns / mega-menus (pure CSS hover + focus-within; no Bootstrap JS) --- */
+/* Mega-menu parents go position:static so the panel can span the full header
+   width (centered band), matching the store's centered dropdowns. */
+.bamboo-has-mega {
+  position: static;
+}
+.bamboo-has-dropdown {
+  position: relative;
+}
+.bamboo-megamenu,
+.bamboo-dropdown {
+  display: none;
+  position: absolute;
+  z-index: 1029;
+  background: #ffffff;
+  border: 1px solid var(--bamboo-border);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.06);
+}
+.bamboo-has-mega:hover .bamboo-megamenu,
+.bamboo-has-mega:focus-within .bamboo-megamenu,
+.bamboo-has-dropdown:hover .bamboo-dropdown,
+.bamboo-has-dropdown:focus-within .bamboo-dropdown {
+  display: block;
+}
+/* Mega-menu: centered full-width band of bold-headed columns. */
+.bamboo-megamenu {
+  left: 0;
+  right: 0;
+  top: 100%;
+  text-align: center;
+  border-left: 0;
+  border-right: 0;
+}
+/* Sizes to its content and stays centered (like the store's width:auto childlist),
+   so all columns sit on one row instead of wrapping under a page-width cap. */
+.bamboo-megamenu__inner {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 30px;
+  padding: 24px 30px;
+  text-align: left;
+  vertical-align: top;
+}
+.bamboo-megamenu__col {
+  min-width: 130px;
+}
+.bamboo-megamenu__head {
+  display: block;
+  margin-bottom: 8px;
   color: var(--bamboo-text);
-  font-family: var(--font-heading);
-  font-weight: 400;
-  text-decoration: none;
-  background: transparent;
-  border: 0;
-}
-.bamboo-nav-link:hover,
-.bamboo-nav-link:focus {
-  color: var(--bamboo-green-link);
-}
-/* Dropdown menus: serif items, hairline card. */
-.bamboo-navbar .dropdown-menu {
-  border-color: var(--bamboo-border);
-  border-radius: var(--radius);
   font-family: var(--font-body);
-  max-height: 70vh;
-  overflow-y: auto;
+  font-weight: 700;
+  text-decoration: none;
 }
-.bamboo-navbar .dropdown-item {
+/* Plain dropdown: a single left-aligned box under the parent. */
+.bamboo-dropdown {
+  left: 0;
+  top: 100%;
+  min-width: 220px;
+  max-width: 320px;
+  padding: 11px 0;
+}
+/* Links inside both menu types: serif, slate, underline-on-hover in green. */
+.bamboo-megamenu__link {
+  display: block;
+  padding: 4px 15px 5px;
   color: var(--bamboo-text);
-  white-space: normal;
+  font-family: var(--font-body);
+  text-decoration: none;
+  white-space: nowrap;
 }
-.bamboo-navbar .dropdown-item:hover,
-.bamboo-navbar .dropdown-item:focus {
+.bamboo-megamenu__head:hover,
+.bamboo-megamenu__link:hover,
+.bamboo-megamenu__head:focus,
+.bamboo-megamenu__link:focus {
   color: var(--bamboo-green-link);
-  background-color: #f7f7f5;
+  text-decoration: underline;
+}
+.bamboo-dropdown .bamboo-megamenu__link {
+  white-space: normal;
 }
 
 /* Mobile off-canvas drawer accordion. */
@@ -361,6 +446,10 @@ a:focus {
   width: 100%;
   text-align: left;
 }
+.bamboo-drawer-link--active {
+  color: var(--bamboo-green-link);
+  font-weight: 700;
+}
 .bamboo-drawer-sublink {
   display: block;
   padding: 8px 4px 8px 18px;
@@ -369,6 +458,12 @@ a:focus {
   font-size: 15px;
   text-decoration: none;
   border-bottom: 1px solid var(--bamboo-border);
+}
+/* Mega-menu column headers, shown inline (bold) within the mobile accordion. */
+.bamboo-drawer-sublink--head {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  padding-left: 4px;
 }
 
 /* ============================================================================

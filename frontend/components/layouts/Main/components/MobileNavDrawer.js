@@ -56,39 +56,53 @@ const MobileNavDrawer = ({ open, onClose }) => {
           />
         </div>
 
-        {/* Events CTA first — the app's own purpose. */}
-        <Link href="/" className="bamboo-btn w-100 mb-3" onClick={onClose}>
-          Browse events
+        {/* Events — the app's own section, active here. A normal nav item. */}
+        <Link
+          href="/"
+          className="bamboo-drawer-link bamboo-drawer-link--active"
+          onClick={onClose}
+        >
+          Events
         </Link>
 
-        {STORE_MENU.map((entry) =>
-          entry.items ? (
-            <div key={entry.label}>
-              <button
-                type="button"
-                className="bamboo-drawer-link d-flex justify-content-between align-items-center"
-                onClick={() => toggle(entry.label)}
-                aria-expanded={expanded === entry.label}
-              >
-                <span>{entry.label}</span>
-                <i className={`bi ${expanded === entry.label ? 'bi-chevron-up' : 'bi-chevron-down'}`} />
-              </button>
-              {expanded === entry.label && (
-                <div>
-                  {entry.items.map((it) => (
-                    <a
-                      key={it.label + it.href}
-                      href={storeUrl(it.href)}
-                      className="bamboo-drawer-sublink"
-                      onClick={onClose}
-                    >
-                      {it.label}
-                    </a>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
+        {STORE_MENU.map((entry) => {
+          // Mega-menu and plain-dropdown parents both collapse to one accordion;
+          // groups are flattened so the mega-menu's column headers appear inline
+          // (as bold links) followed by their child links.
+          const children = entry.groups
+            ? entry.groups.flatMap((g) => [{ ...g, isHead: true }, ...g.items])
+            : entry.items;
+
+          if (children) {
+            return (
+              <div key={entry.label}>
+                <button
+                  type="button"
+                  className="bamboo-drawer-link d-flex justify-content-between align-items-center"
+                  onClick={() => toggle(entry.label)}
+                  aria-expanded={expanded === entry.label}
+                >
+                  <span>{entry.label}</span>
+                  <i className={`bi ${expanded === entry.label ? 'bi-chevron-up' : 'bi-chevron-down'}`} />
+                </button>
+                {expanded === entry.label && (
+                  <div>
+                    {children.map((it) => (
+                      <a
+                        key={it.label + it.href}
+                        href={storeUrl(it.href)}
+                        className={`bamboo-drawer-sublink${it.isHead ? ' bamboo-drawer-sublink--head' : ''}`}
+                        onClick={onClose}
+                      >
+                        {it.label}
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          }
+          return (
             <a
               key={entry.label}
               href={storeUrl(entry.href)}
@@ -97,8 +111,8 @@ const MobileNavDrawer = ({ open, onClose }) => {
             >
               {entry.label}
             </a>
-          ),
-        )}
+          );
+        })}
       </div>
     </>
   );

@@ -19,46 +19,88 @@ export const LOGO_URL =
 export const storeUrl = (path) =>
   /^https?:\/\//.test(path) ? path : `${STORE_ORIGIN}${path}`;
 
-// Top-level menu. `items` present => dropdown parent; otherwise a direct link.
+// Top-level menu, captured verbatim from the live store (2026-07-06) INCLUDING its
+// two-level nesting so the desktop dropdowns render as the store's real mega-menus:
+//   • `groups` present => centered multi-column mega-menu (each group is a bold
+//     column header that is itself a link, with its child links beneath).
+//   • `items` present  => a plain single-column dropdown box.
+//   • neither          => a direct top-level link.
+// The "Events" tab is NOT here — it is an events-native relative link rendered by
+// NavBar (see Decision 1 override 2026-07-06: Events is a normal nav item to the
+// right of Bookmarks, not a standalone button).
 export const STORE_MENU = [
   { label: 'Home', href: '/' },
   {
     label: 'About Us',
-    items: [
-      { label: 'About Us', href: '/pages/about-us-1' },
-      { label: 'Contact Us', href: '/pages/contact-us' },
-      { label: 'Send Us (Reviews, Samples, News)', href: '/pages/send-us' },
+    groups: [
+      { label: 'About Us', href: '/pages/about-us-1', items: [] },
+      {
+        label: 'Contact Us',
+        href: '/pages/contact-us',
+        items: [
+          { label: 'Send Us (Reviews, Samples, News)', href: '/pages/send-us' },
+        ],
+      },
     ],
   },
   {
     label: 'Editorial',
-    items: [
-      { label: 'The Bamboo Post', href: '/blogs/news' },
-      { label: 'News & New Releases', href: '/blogs/news' },
-      { label: 'Special Features', href: '/blogs/features' },
-      { label: 'Interviews', href: '/blogs/interviews' },
-      { label: 'Distiller & Brewery Spotlights', href: '/blogs/brand-spotlights' },
-      { label: 'DuRhum', href: '/blogs/durhum' },
-      { label: 'Rhythm & Booze', href: '/blogs/the-rhythm-and-booze-with-felipe-schrieberg' },
-      { label: 'Bottoms Up with Joe', href: '/blogs/bottoms-up-with-joe-micallef' },
-      { label: 'Nostalgic Drams', href: '/blogs/88-bamboo-philippines-88-tagay/tagged/whiskyph' },
-      { label: 'Japanese Whisky Dictionary', href: '/blogs/japanese-whisky-dictionary' },
-      { label: 'Trooper Beers and Tunes', href: '/blogs/craft-beer' },
-      { label: "Sku's (Not So) Recent Drinks", href: '/blogs/skus-not-so-recent-drinks' },
-      { label: 'Sicklehut', href: '/blogs/sicklehut' },
-      { label: 'SG Alcohol Guy', href: '/blogs/sg-alcohol-guy' },
-      { label: 'John Go', href: '/blogs/john-go' },
-      { label: "What's Happening", href: '/blogs/whats-on' },
-      { label: 'Escapades', href: '/blogs/escapades' },
-      { label: 'Bar Directory', href: '/pages/bar-directory' },
-      { label: 'Prints', href: '/blogs/prints' },
-      { label: 'Books', href: '/pages/library' },
-      { label: 'TV', href: '/blogs/tv' },
-      { label: 'New to Whisky?', href: '/pages/whisky-101' },
-      { label: 'New to Japanese Sake?', href: '/pages/sake-101' },
-      { label: 'New to Craft Beer?', href: '/pages/craft-beer-101' },
-      { label: 'New to Tequila or Mezcal?', href: '/pages/tequila-mezcal-101' },
-      { label: 'Explained in 3 Mins', href: '/blogs/explained-in-3-minutes' },
+    groups: [
+      {
+        label: 'The Bamboo Post',
+        href: '/blogs/news',
+        items: [
+          { label: 'News & New Releases', href: '/blogs/news' },
+          { label: 'Special Features', href: '/blogs/features' },
+          { label: 'Interviews', href: '/blogs/interviews' },
+          { label: 'Distiller & Brewery Spotlights', href: '/blogs/brand-spotlights' },
+        ],
+      },
+      {
+        label: 'Columns',
+        href: '/blogs/the-rhythm-and-booze-with-felipe-schrieberg',
+        items: [
+          { label: 'DuRhum', href: '/blogs/durhum' },
+          { label: 'Rhythm & Booze', href: '/blogs/the-rhythm-and-booze-with-felipe-schrieberg' },
+          { label: 'Bottoms Up with Joe', href: '/blogs/bottoms-up-with-joe-micallef' },
+          { label: 'Nostalgic Drams', href: 'https://88bamboo.co/blogs/88-bamboo-philippines-88-tagay/tagged/whiskyph' },
+          { label: 'Japanese Whisky Dictionary', href: '/blogs/japanese-whisky-dictionary' },
+          { label: 'Trooper Beers and Tunes', href: '/blogs/craft-beer' },
+          { label: "Sku's (Not So) Recent Drinks", href: '/blogs/skus-not-so-recent-drinks' },
+          { label: 'Sicklehut', href: '/blogs/sicklehut' },
+          { label: 'SG Alcohol Guy', href: '/blogs/sg-alcohol-guy' },
+          { label: 'John Go', href: '/blogs/john-go' },
+        ],
+      },
+      {
+        label: 'Lifestyle',
+        href: '/blogs/escapades',
+        items: [
+          { label: "What's Happening", href: '/blogs/whats-on' },
+          { label: 'Escapades', href: '/blogs/escapades' },
+          { label: 'Bar Directory', href: 'https://88bamboo.co/pages/bar-directory' },
+        ],
+      },
+      {
+        label: 'Library',
+        href: '/blogs/prints',
+        items: [
+          { label: 'Prints', href: '/blogs/prints' },
+          { label: 'Books', href: 'https://88bamboo.co/pages/library' },
+          { label: 'TV', href: '/blogs/tv' },
+        ],
+      },
+      {
+        label: 'Beginner Series',
+        href: '/pages/beginners-guide',
+        items: [
+          { label: 'New to Whisky?', href: '/pages/whisky-101' },
+          { label: 'New to Japanese Sake?', href: '/pages/sake-101' },
+          { label: 'New to Craft Beer?', href: '/pages/craft-beer-101' },
+          { label: 'New to Tequila or Mezcal?', href: '/pages/tequila-mezcal-101' },
+          { label: 'Explained in 3 Mins', href: '/blogs/explained-in-3-minutes' },
+        ],
+      },
     ],
   },
   {
@@ -77,27 +119,38 @@ export const STORE_MENU = [
   },
   {
     label: 'Cocktails',
-    items: [
-      { label: 'Recipes', href: '/blogs/cocktail-recipes' },
-      { label: "Miya's Tipsy Diaries", href: 'https://88bamboo.myshopify.com/blogs/cocktail-recipes/tagged/miyas-tipsy-diaries' },
-      { label: 'I (Shanty) Try Drinks', href: '/blogs/itrydrinks' },
-      { label: "Nick's Boston Baijiu Bar", href: 'https://88bamboo.co/blogs/cocktail-recipes/tagged/thenickromancer' },
-      { label: 'All Cocktail Recipes', href: '/blogs/cocktail-recipes' },
-      { label: 'Liqueur Lowdown', href: '/blogs/liqueur-lowdown' },
+    groups: [
+      {
+        label: 'Recipes',
+        href: '/blogs/cocktail-recipes',
+        items: [
+          { label: "Miya's Tipsy Diaries", href: 'https://88bamboo.myshopify.com/blogs/cocktail-recipes/tagged/miyas-tipsy-diaries' },
+          { label: 'I (Shanty) Try Drinks', href: '/blogs/itrydrinks' },
+          { label: "Nick's Boston Baijiu Bar", href: 'https://88bamboo.co/blogs/cocktail-recipes/tagged/thenickromancer' },
+          { label: 'All Cocktail Recipes', href: '/blogs/cocktail-recipes' },
+        ],
+      },
+      {
+        label: 'Bar Essentials',
+        href: '/blogs/liqueur-lowdown',
+        items: [
+          { label: 'Liqueur Lowdown', href: '/blogs/liqueur-lowdown' },
+        ],
+      },
     ],
   },
   {
     label: 'Community',
     items: [
       { label: 'Whisky Club Asia Facebook Group', href: 'https://www.facebook.com/groups/whiskyclubasia' },
-      { label: '88 Bamboo Japan', href: '/blogs/88-bamboo-japan-88%E7%AB%B9%E6%97%A5%E6%9C%AC' },
-      { label: '88 Bamboo Hong Kong', href: '/blogs/88-bamboo-hong-kong-88%E7%AB%B9%E9%A6%99%E6%B8%AF' },
-      { label: '88 Bamboo Taiwan', href: '/blogs/88-bamboo-taiwan-88%E7%AB%B9-%E5%8F%B0%E6%B9%BE' },
-      { label: '88 Bamboo Philippines', href: '/blogs/88-bamboo-philippines-88-tagay' },
-      { label: '88 Bamboo Thailand', href: '/blogs/88-bamboo-thailand-88-%E0%B9%84%E0%B8%9C%E0%B9%88-1' },
-      { label: '88 Bamboo Vietnam', href: '/blogs/88-bamboo-vietnam-88-cay-tre' },
-      { label: '88 Bamboo Indonesia', href: '/blogs/88-bamboo-indonesia-88-bambu' },
-      { label: '88 Bamboo Korea', href: '/blogs/88-bamboo-korea-88-%EB%8C%80%EB%82%98%EB%AC%B4' },
+      { label: '88 Bamboo Japan (88竹日本)', href: '/blogs/88-bamboo-japan-88%E7%AB%B9%E6%97%A5%E6%9C%AC' },
+      { label: '88 Bamboo Hong Kong (88竹香港)', href: '/blogs/88-bamboo-hong-kong-88%E7%AB%B9%E9%A6%99%E6%B8%AF' },
+      { label: '88 Bamboo Taiwan (88竹 台湾)', href: '/blogs/88-bamboo-taiwan-88%E7%AB%B9-%E5%8F%B0%E6%B9%BE' },
+      { label: '88 Bamboo Philippines (88 Tagay)', href: '/blogs/88-bamboo-philippines-88-tagay' },
+      { label: '88 Bamboo Thailand (88 ไผ่)', href: '/blogs/88-bamboo-thailand-88-%E0%B9%84%E0%B8%9C%E0%B9%88-1' },
+      { label: '88 Bamboo Vietnam (88 cây tre)', href: '/blogs/88-bamboo-vietnam-88-cay-tre' },
+      { label: '88 Bamboo Indonesia (88 bambu)', href: '/blogs/88-bamboo-indonesia-88-bambu' },
+      { label: '88 Bamboo Korea (88 대나무)', href: '/blogs/88-bamboo-korea-88-%EB%8C%80%EB%82%98%EB%AC%B4' },
     ],
   },
   { label: 'Be A Guest Writer!', href: 'https://88bamboo.co/pages/send-us' },

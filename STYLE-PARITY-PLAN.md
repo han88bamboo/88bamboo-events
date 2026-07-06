@@ -436,6 +436,85 @@ Files touched: `styles/globals.css`, `components/layouts/Main/{Main.js, componen
 
 ---
 
+## Parity Gap Audit — Round 3 (2026-07-06)
+
+Owner flagged four navbar-behaviour gaps by comparing `88bamboo.co/pages/about-us-1`
+(reference) with `88bamboo.co/a/events/`. Reference values were measured live from
+`theme.scss.css?v=59715874…` + the page markup (not guessed). Paths relative to `frontend/`.
+
+Legend: 🔴 fix · 🟡 intentional · ⚪ needs a decision.
+
+**Gap G1 🔴 — The "Events" button sticks out on its own.** *(Owner override of the locked Decision 1 / Round-2 Gap C3.)*
+- Observed: reference has a single uniform nav row (Home … Bookmarks); ours renders a
+  standalone green `.bamboo-btn` "Events" pill on the far right, visually detached.
+- Owner instruction (2026-07-06): make Events **just another nav item, to the right of
+  Bookmarks**, not a button on its own.
+- Code cause: `NavBar.js:64-67` rendered Events as a `bamboo-btn bamboo-btn--small` in the
+  right-hand flex group (outside the `<ul>`).
+- Fix: render Events as the last `<li>` in the nav `<ul>`, styled as a normal
+  `.bamboo-nav-link` (kept as a relative `next/link`). This **supersedes** the earlier
+  "keep the green Events button" locked decision.
+
+**Gap G2 🔴 — Nav links have no hover/active underline.**
+- Reference (measured): each top-level link wraps a `.site-nav__label { border-bottom:1px
+  solid transparent }`. On `:hover`/`:focus` the label goes `color:#1A6132; border-bottom-color:
+  #1A6132`. The **current section** uses `.site-nav__link--active .site-nav__label { color:
+  #1A6132; font-weight:bold; border-bottom-color:#1A6132 }` — i.e. green, bold, underlined.
+- Ours: `globals.css` `.bamboo-nav-link:hover` only changed the whole-link colour; no
+  underline, no active state, and labels weren't wrapped in a span.
+- Fix: wrap every nav label in `.bamboo-nav-link__label` (border-bottom underline);
+  add `:hover/:focus` and `.bamboo-nav-link--active` rules mirroring the store. Events is
+  the active section here, so it always shows the green/bold/underlined state.
+
+**Gap G3 🔴 — Header is not sticky on scroll.**
+- Reference: the store header stack stays pinned to the top on scroll (`.marquee-container
+  { position:sticky; top:0; z-index:1000 }`, header directly beneath).
+- Ours: `.bamboo-navbar` had no positioning → scrolled away with the page.
+- Fix: `.bamboo-navbar { position:sticky; top:0; z-index:1030 }`. Verified via preview:
+  `position:sticky, top:0, z-index:1030`, and **no overflow-clipping/transformed ancestor**
+  between the navbar and the scroll root (would break sticky) — confirmed none.
+
+**Gap G4 🔴 — Dropdowns are flat lists, not the store's organised mega-menus.**
+- Reference (parsed live from `#SiteNav`): the top menu is **two-level**. About Us,
+  Editorial and Cocktails open **centered multi-column mega-menus** whose columns are bold
+  header-links (`site-nav__child-link--parent`) with child links beneath — About Us = 2
+  cols, **Editorial = 5 cols** (The Bamboo Post / Columns / Lifestyle / Library / Beginner
+  Series), Cocktails = 2 cols (Recipes / Bar Essentials). Reviews and Community are **plain
+  single-column dropdown boxes** (no group headers). CSS: `.site-nav__childlist { padding:
+  11px 17px }`, `.site-nav__dropdown .site-nav__link { padding:4px 15px 5px }`,
+  `.site-nav__child-link--parent { font-weight:700 }`, mega dropdown centered & `width:auto`.
+- Ours: `menuData.js` flattened Editorial to 25 loose items; `NavBar.js` rendered every
+  dropdown as one Bootstrap `.dropdown-menu` column.
+- Fix: restructure `STORE_MENU` to carry the store's real nesting — `groups` (mega) vs
+  `items` (plain) — captured verbatim incl. the group header hrefs and Community's
+  native-language suffixes. Rebuild `NavBar.js` to render `groups`→centered mega-menu band
+  and `items`→plain box, using **pure-CSS hover/focus-within** (dropped the Bootstrap
+  dropdown JS). `MobileNavDrawer.js` flattens `groups` so column headers show inline (bold)
+  above their children in the accordion.
+
+### Round-3 fixes — APPLIED & verified 2026-07-06
+
+Confirmed via computed styles in a running preview at 1280px + a production `next build`:
+- **G1** — Events is now the last nav `<li>` (right of Bookmarks); order reads Home, About
+  Us, Editorial, Reviews, Cocktails, Community, Be A Guest Writer!, Bookmarks, **Events**.
+- **G2** — Events label computes `font-weight:700`, `color/border-bottom rgb(26,97,50)`
+  (#1A6132); non-active links get the same underline on hover.
+- **G3** — `.bamboo-navbar` computes `position:sticky; top:0; z-index:1030`; no clipping
+  ancestor.
+- **G4** — 3 mega-menus + 2 plain dropdowns; **Editorial mega = 5 columns on one row**
+  (matches the reference screenshot); mobile drawer shows Editorial as 5 bold group headers
+  + child links (30 rows). Default state: mega-menus `display:none` (open on hover/focus).
+
+Files touched: `components/layouts/Main/menuData.js`, `components/layouts/Main/components/
+{NavBar.js, MobileNavDrawer.js}`, `styles/globals.css`. `next build` passes; no console/
+server errors.
+
+**Note — locked decision changed:** Decision 1 / Round-2 Gap C3 ("keep the added green
+Events button") is **superseded** by G1 per the owner's 2026-07-06 instruction. The Events
+tab remains (it's still the app's own section), but as a plain nav item, not a button.
+
+---
+
 ## Owner Decisions Required
 
 ### Decision 1: Navbar — recreate the Shopify nav exactly, or a simplified Events-compatible version?
