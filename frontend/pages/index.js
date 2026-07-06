@@ -50,7 +50,7 @@ function ListingPage(props) {
   return (
     <>
       <Head>
-        <title>Drinks &amp; hospitality events — 88 Bamboo</title>
+        <title>Find, Attend &amp; List Events — 88 Bamboo</title>
         <meta
           name="description"
           content="Discover upcoming drinks and hospitality events worldwide — tastings, masterclasses, bar takeovers and more on the 88 Bamboo events board."
