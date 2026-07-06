@@ -181,7 +181,19 @@ are lighter).
     `psql "$DATABASE_URL" -f database/migrations/ep2-location.sql`
     It (1) adds the 5 nullable columns to `event_versions` (no backfill — existing events keep NULL coords and render the address-string map) and (2) creates + seeds `countries` + `country_regions`. Safe to re-run.
   - Ensure `NEXT_PUBLIC_MAPS_BROWSER_KEY` is set on Vercel (**done** by owner 2026-07-07) — the referrer restriction must include the production apex/proxy origin.
-  - Local dev needs **nothing extra**: `schema.sql` already carries the same DDL + seed (`docker compose down -v && up --build` to re-seed).
+  - Local dev needs **nothing extra**: `schema.sql` already carries the same DDL + seed (`docker compose down -v && up --build` to re-seed — the `-v` is required; a plain `up` keeps the old volume and the new tables/columns won't appear).
+
+  **Owner verification checklist (EP-2)** — on the running docker stack (`export NEXT_PUBLIC_MAPS_BROWSER_KEY=… && docker compose down -v && docker compose up --build`; Stripe test key + `stripe listen`), browse `http://localhost:8080/a/events`:
+  - [ ] **Submit — address search:** the address field is a Google search box; typing shows suggestions; picking one fills the address (a "Selected: …" line shows) and auto-fills the city.
+  - [ ] **Submit — country/region:** the country dropdown is populated from `/geo` and includes **Hong Kong, Macau, Taiwan, Mainland China** (and no plain "China"); choosing a region-required country (USA, Australia, UK, Canada, France, Russia, Denmark, NZ, Brazil, Mexico, Chile, Indonesia, Netherlands, Portugal, Spain, South Africa, Mainland China) reveals a **required** State/Territory/Region dropdown; choosing **HK/Macau/Taiwan** auto-fills the region with the country name.
+  - [ ] **Server enforcement:** typing an address but NOT picking a suggestion → submit rejected with "Please choose your address from the suggestions…"; a region-required country with no region → rejected; a country not in the list → rejected.
+  - [ ] **Happy path:** Google-selected address → `4242…` → USD 5 hold → approve in admin → the published detail page shows the **exact-pin** map + "Get directions" opens to that pin.
+  - [ ] **Legacy event (no coords):** its detail page still shows the **address-string** map (no error), and its edit form still saves.
+  - [ ] **Edit paths keep coords:** magic-link `/edit`, account dashboard, admin modal all prefill country/region/address; **saving without touching the address keeps the exact-pin** (coords carried forward); picking a NEW address moves the pin.
+  - [ ] **JSON-LD:** `curl -s http://localhost:8080/a/events/<slug>` (or view-source) shows `"geo":{"@type":"GeoCoordinates",…}` and `addressRegion`/`postalCode` when coords exist.
+  - [ ] **Fallback (no key):** with `NEXT_PUBLIC_MAPS_BROWSER_KEY` unset, the address field degrades to a plain text input and the form still submits with the address left blank.
+  - [ ] **Regression:** listing-page country filter still works; existing events render.
+  - [ ] **Prod DB:** `psql "$DATABASE_URL" -f database/migrations/ep2-location.sql` applied to the live DB before deploy; large region seed lists (Russia/Indonesia) sanity-checked.
 
 ### Phase EP-3 — Submission form UX (D1, D2, D3)
 - [ ] **D1 — Image preview + drag-and-drop** for the single required image in [`SubmitEvent.js`](frontend/components/views/landingPages/SubmitEvent/SubmitEvent.js) (preview the selected file, drag-drop zone). **Single image only** — multi-image is Track C / the existing `plan.md` backlog, explicitly out of this plan.
