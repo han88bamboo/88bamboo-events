@@ -8,7 +8,7 @@ import Link from 'next/link';
 const AnnouncementMarquee = () => (
   <div className="bamboo-marquee text-center py-2 px-3">
     {/* Relative link — next/link resolves it under basePath '/a/events'. */}
-    <Link href="/">Just In 👉 Discover upcoming drinks &amp; hospitality events</Link>
+    <Link href="/">Just In 👉 Discover upcoming events &amp; promotions</Link>
   </div>
 );
 
