@@ -132,6 +132,14 @@ def pending():
                     ev.submission_type,
                     ev.drink_categories,
                     ev.event_format,
+                    -- Per-date schedule (EP-6) so the reviewer sees every date and
+                    -- the admin edit modal prefills the multi-date table. '[]' for a
+                    -- legacy version (implied single occurrence from the scalars).
+                    COALESCE((
+                        SELECT json_agg(json_build_object('start', o.starts_at, 'end', o.ends_at)
+                                        ORDER BY o.sort_order, o.starts_at)
+                        FROM event_occurrences o WHERE o.event_version_id = ev.id
+                    ), '[]'::json)       AS occurrences,
                     ev.created_at,
                     e.submitter_email,
                     e.current_status     AS event_status,
@@ -716,6 +724,13 @@ def live():
                     pv.link,
                     pv.contact_email,
                     pv.submission_type,
+                    -- Per-date schedule (EP-6) for the date-count display + the
+                    -- admin edit modal's multi-date table prefill.
+                    COALESCE((
+                        SELECT json_agg(json_build_object('start', o.starts_at, 'end', o.ends_at)
+                                        ORDER BY o.sort_order, o.starts_at)
+                        FROM event_occurrences o WHERE o.event_version_id = pv.id
+                    ), '[]'::json)       AS occurrences,
                     (pv.end_datetime IS NOT NULL AND pv.end_datetime < now()) AS is_past,
                     (SELECT count(*) FROM event_versions ev2 WHERE ev2.event_id = e.id)
                                          AS version_count,

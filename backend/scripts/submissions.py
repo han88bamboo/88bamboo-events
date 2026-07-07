@@ -25,6 +25,7 @@
 # Order of operations mirrors plan §6: validate the image BEFORE any upload, and
 # authorise the card BEFORE persisting.
 
+import json
 import os
 
 import psycopg2
@@ -32,6 +33,7 @@ from flask import Blueprint, jsonify, request
 from psycopg2.extras import Json
 
 from app import db_manager
+from event_versioning import insert_occurrences
 from geo_reference import load_geo
 from magic_links import create_magic_link
 from notifications import send_new_submission_admin, send_under_review
@@ -89,6 +91,21 @@ def _load_geo():
         return load_geo(cursor)
 
 
+def _parse_occurrences_field(raw):
+    """Parse the multipart `occurrences` field (a JSON array string emitted by the
+    multi-date form) into the list of {start, end} dicts the validator expects.
+    Returns None when absent/blank/unparseable so validate_submission falls back to
+    the single-date scalar path (EP-6). The 3b re-post carries `occurrences` as a
+    real JSON list already, so only this multipart entry point needs the parse."""
+    if not raw:
+        return None
+    try:
+        value = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    return value if isinstance(value, list) else None
+
+
 @blueprint.route("", methods=["POST"])
 @rate_limited(_limiter)
 def submit_event():
@@ -111,6 +128,9 @@ def submit_event():
         "contact_email": request.form.get("contact_email"),
         "start_datetime": request.form.get("start_datetime"),
         "end_datetime": request.form.get("end_datetime"),
+        # Multi-date schedule (EP-6): a JSON array string when the submitter added
+        # extra dates, else absent → the validator uses the scalar single-date path.
+        "occurrences": _parse_occurrences_field(request.form.get("occurrences")),
         "venue_name": request.form.get("venue_name"),
         "venue_address": request.form.get("venue_address"),
         "country": request.form.get("country"),
@@ -330,6 +350,11 @@ def create_intent():
                 ),
             )
             version_id = cursor.fetchone()["id"]
+
+            # Snapshot the per-date schedule for this version (EP-6), in the SAME
+            # transaction. A single-date submission normalises to one row; the
+            # scalar start/end above are the derived MIN/MAX summary of these rows.
+            insert_occurrences(cursor, version_id, cleaned.get("occurrences"))
 
             cursor.execute(
                 "INSERT INTO files ("

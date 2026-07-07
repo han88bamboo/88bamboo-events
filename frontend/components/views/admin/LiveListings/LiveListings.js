@@ -110,6 +110,12 @@ function ListingRow({ item, token, onUnpublish, onEdit, onMessage, busy }) {
             </div>
             <p className="small text-muted mb-1">
               {formatDateTime(item.start_datetime)} — {formatDateTime(item.end_datetime)}
+              {/* Multi-date schedule count (EP-6). */}
+              {(item.occurrences || []).length > 1 && (
+                <span className="badge bg-secondary-subtle text-secondary ms-2">
+                  {item.occurrences.length} dates
+                </span>
+              )}
             </p>
             <p className="small text-muted mb-1">
               {item.city}, {item.country} · {item.event_format}

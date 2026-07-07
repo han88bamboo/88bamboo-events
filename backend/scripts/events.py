@@ -25,6 +25,7 @@ import psycopg2
 from flask import Blueprint, jsonify, request
 
 from app import db_manager
+from event_versioning import fetch_occurrences
 
 file_name = os.path.basename(__file__)
 blueprint = Blueprint(file_name[:-3], __name__)  # blueprint name == filename
@@ -65,6 +66,11 @@ _PUBLIC_COLUMNS = """
     pv.image_url,
     pv.event_format,
     pv.drink_categories,
+    -- Count of extra dates for the "N dates" listing/widget hint (EP-6 E-D3). A
+    -- cheap summary scalar — the listing/widget feeds still carry the summary
+    -- start/end only, never the per-date fan-out. 0 for a legacy version (implied
+    -- single occurrence). The detail-by-slug read adds the full occurrences list.
+    (SELECT count(*) FROM event_occurrences o WHERE o.event_version_id = pv.id) AS occurrence_count,
     (pv.end_datetime IS NOT NULL AND pv.end_datetime < now()) AS is_past
 """
 
@@ -275,10 +281,17 @@ def by_slug(slug):
                 (slug,),
             )
             row = cursor.fetchone()
+            # The full per-date schedule for the detail page + per-occurrence
+            # JSON-LD (EP-6). [] for a legacy event — the detail page implies one
+            # occurrence from the scalar summary. Only the detail read fans this
+            # out; the listing/widget feeds keep the summary scalars (E-D3).
+            occurrences = fetch_occurrences(cursor, row["version_id"]) if row else []
     except psycopg2.Error:
         return jsonify({"code": 500, "error": "Database error occurred"}), 500
 
     if not row:
         return jsonify({"code": 404, "error": "Event not found."}), 404
 
-    return jsonify({"code": 200, "data": dict(row)}), 200
+    data = dict(row)
+    data["occurrences"] = occurrences
+    return jsonify({"code": 200, "data": data}), 200

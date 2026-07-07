@@ -13,6 +13,14 @@ function EventDetail({ event }) {
   if (!event) return null;
   const past = isPastEvent(event);
   const categories = event.drink_categories || [];
+  // The per-date schedule (EP-6). A legacy event has no occurrence rows — imply a
+  // single occurrence from the scalar summary (E-D2, no backfill), so this renders
+  // identically to before for every existing event.
+  const occurrences =
+    event.occurrences && event.occurrences.length
+      ? event.occurrences
+      : [{ start: event.start_datetime, end: event.end_datetime }];
+  const multiDate = occurrences.length > 1;
   const where = [
     event.venue_name,
     event.venue_address,
@@ -82,7 +90,20 @@ function EventDetail({ event }) {
       <dl className="row">
         <dt className="col-sm-3">When</dt>
         <dd className="col-sm-9">
-          {formatDateRange(event.start_datetime, event.end_datetime)}
+          {multiDate ? (
+            <>
+              <span className="d-block fw-semibold">{occurrences.length} dates</span>
+              <ul className="list-unstyled mb-1">
+                {occurrences.map((o, i) => (
+                  // Schedule rows are order-stable (server-sorted, no reorder).
+                  // eslint-disable-next-line react/no-array-index-key
+                  <li key={i}>{formatDateRange(o.start, o.end)}</li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            formatDateRange(occurrences[0].start, occurrences[0].end)
+          )}
           <span className="d-block text-muted small">Local time at the event location.</span>
         </dd>
 

@@ -227,6 +227,86 @@ class TestLocationRules(unittest.TestCase):
         self.assertIsNone(cleaned["region"])
 
 
+class TestOccurrences(unittest.TestCase):
+    """EP-6 multi-date scheduling: occurrence validation, summary derivation, and
+    single-date normalisation. validate_submission is the single writer of both the
+    occurrence rows and the derived scalar summary."""
+
+    def test_single_date_normalised_to_one_occurrence(self):
+        # A bare single-date submission (no `occurrences` array) still validates and
+        # is normalised into exactly one occurrence; the summary equals its dates.
+        cleaned, errors = validate_submission(_valid_form(), CATEGORIES, FORMATS)
+        self.assertEqual(errors, [])
+        self.assertEqual(len(cleaned["occurrences"]), 1)
+        self.assertEqual(cleaned["occurrences"][0]["start"], "2026-08-01T18:00:00")
+        self.assertEqual(cleaned["occurrences"][0]["end"], "2026-08-01T21:00:00")
+        self.assertEqual(cleaned["start_datetime"], "2026-08-01T18:00:00")
+        self.assertEqual(cleaned["end_datetime"], "2026-08-01T21:00:00")
+
+    def test_multi_date_summary_is_min_start_max_end(self):
+        # Three dates supplied out of order → summary start = earliest start,
+        # summary end = latest end, and the stored occurrences are start-sorted.
+        occ = [
+            {"start": "2026-08-10T19:00", "end": "2026-08-10T22:00"},
+            {"start": "2026-08-01T18:00", "end": "2026-08-01T21:00"},
+            {"start": "2026-08-05T18:00", "end": "2026-08-05T23:30"},
+        ]
+        cleaned, errors = validate_submission(
+            _valid_form(occurrences=occ), CATEGORIES, FORMATS
+        )
+        self.assertEqual(errors, [])
+        self.assertEqual(len(cleaned["occurrences"]), 3)
+        # Sorted by start.
+        self.assertEqual(cleaned["occurrences"][0]["start"], "2026-08-01T18:00:00")
+        self.assertEqual(cleaned["occurrences"][-1]["start"], "2026-08-10T19:00:00")
+        # Derived summary = MIN(start) / MAX(end).
+        self.assertEqual(cleaned["start_datetime"], "2026-08-01T18:00:00")
+        self.assertEqual(cleaned["end_datetime"], "2026-08-10T22:00:00")
+
+    def test_occurrence_end_before_start_rejected(self):
+        occ = [{"start": "2026-08-01T21:00", "end": "2026-08-01T18:00"}]
+        _, errors = validate_submission(
+            _valid_form(occurrences=occ), CATEGORIES, FORMATS
+        )
+        self.assertTrue(any("after the start time" in e.lower() for e in errors))
+
+    def test_occurrence_equal_start_end_rejected(self):
+        # Occurrences require start < end strictly (E-D6), unlike the grandfathered
+        # single-date scalar path.
+        occ = [{"start": "2026-08-01T18:00", "end": "2026-08-01T18:00"}]
+        _, errors = validate_submission(
+            _valid_form(occurrences=occ), CATEGORIES, FORMATS
+        )
+        self.assertTrue(any("after the start time" in e.lower() for e in errors))
+
+    def test_occurrence_missing_time_rejected(self):
+        occ = [{"start": "", "end": "2026-08-01T21:00"}]
+        _, errors = validate_submission(
+            _valid_form(occurrences=occ), CATEGORIES, FORMATS
+        )
+        self.assertTrue(any("valid start and end" in e.lower() for e in errors))
+
+    def test_occurrence_count_capped(self):
+        # 51 dates → over the 50 cap → rejected.
+        occ = [
+            {"start": f"2026-08-01T{h:02d}:00", "end": f"2026-08-01T{h:02d}:30"}
+            for h in range(0, 24)
+        ] * 3  # 72 rows
+        _, errors = validate_submission(
+            _valid_form(occurrences=occ), CATEGORIES, FORMATS
+        )
+        self.assertTrue(any("at most 50" in e.lower() for e in errors))
+
+    def test_empty_occurrences_falls_back_to_scalars(self):
+        # An empty array is not a valid multi-date schedule; the validator falls
+        # back to the single-date scalar path (which here is valid).
+        cleaned, errors = validate_submission(
+            _valid_form(occurrences=[]), CATEGORIES, FORMATS
+        )
+        self.assertEqual(errors, [])
+        self.assertEqual(len(cleaned["occurrences"]), 1)
+
+
 class TestValidateImage(unittest.TestCase):
     def test_accepts_valid_types(self):
         for ctype, blob in (

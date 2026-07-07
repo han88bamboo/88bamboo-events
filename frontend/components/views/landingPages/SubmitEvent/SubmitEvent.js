@@ -20,6 +20,7 @@ import { useEffect, useState } from 'react';
 import { submissionsService } from '@/core/services/submissions';
 import { SUBMITTER_TYPES, withLegacyValue } from '@/core/constants/formOptions';
 import LocationFields from '@/components/common/LocationFields';
+import ScheduleFields from '@/components/common/ScheduleFields';
 import CheckoutStep from './CheckoutStep';
 
 // Mirror the server's image rules for fast client-side feedback (the server is
@@ -30,9 +31,12 @@ const MAX_IMAGE_MB = 5;
 // Wizard steps (data-entry only — payment stays on the post-3a screen). Each
 // entry lists the field keys validated to gate "Next"/reveal inline errors; the
 // location step also folds in LocationFields' own reported errors.
+// The Details step's date entry (start/end, or the multi-date schedule) is owned
+// by ScheduleFields, which reports its own errors up (like LocationFields) — so the
+// date keys are NOT in this per-field map.
 const STEPS = ['Details', 'Location', 'Description & image'];
 const STEP_FIELD_KEYS = [
-  ['name', 'submitter_email', 'start_datetime', 'end_datetime'],
+  ['name', 'submitter_email'],
   ['country', 'city'],
   ['event_format', 'drink_categories', 'image'],
 ];
@@ -81,8 +85,6 @@ function buildFieldErrors(fields, selectedCategories, imageFile) {
   const fe = {};
   if (!fields.name.trim()) fe.name = 'Event name is required.';
   if (!fields.submitter_email.trim()) fe.submitter_email = 'Submitter email is required.';
-  if (!fields.start_datetime) fe.start_datetime = 'Start date/time is required.';
-  if (!fields.end_datetime) fe.end_datetime = 'End date/time is required.';
   if (!fields.country.trim()) fe.country = 'Country is required.';
   if (!fields.city.trim()) fe.city = 'City is required.';
   if (!fields.event_format) fe.event_format = 'Event format is required.';
@@ -91,6 +93,14 @@ function buildFieldErrors(fields, selectedCategories, imageFile) {
   const img = imageError(imageFile);
   if (img) fe.image = img;
   return fe;
+}
+
+// Map a serialised occurrences list ([{start,end}] ISO) to the datetime-local
+// 'YYYY-MM-DDTHH:MM' shape ScheduleFields edits. Only a genuine multi-date schedule
+// (>1 date) opens the table; a single/legacy date uses the scalar start/end.
+function toLocalOccurrences(list) {
+  if (!Array.isArray(list) || list.length <= 1) return undefined;
+  return list.map((o) => ({ start: toLocalInput(o.start), end: toLocalInput(o.end) }));
 }
 
 // Build the initial form state, seeding from a re-submit prefill when present.
@@ -103,6 +113,7 @@ function initialFields(prefill) {
     contact_email: prefill.contact_email || '',
     start_datetime: toLocalInput(prefill.start_datetime),
     end_datetime: toLocalInput(prefill.end_datetime),
+    occurrences: toLocalOccurrences(prefill.occurrences),
     venue_name: prefill.venue_name || '',
     venue_address: prefill.venue_address || '',
     country: prefill.country || '',
@@ -149,6 +160,7 @@ function SubmitEvent({ taxonomy, prefill }) {
   const [selectedCategories, setSelectedCategories] = useState(prefill?.drink_categories || []);
   const [imageFile, setImageFile] = useState(null);
   const [locationErrors, setLocationErrors] = useState([]); // from LocationFields
+  const [scheduleErrors, setScheduleErrors] = useState([]); // from ScheduleFields (EP-6)
   const [honeypot, setHoneypot] = useState(''); // must stay empty for real users
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState([]); // server/network errors (top alert)
@@ -161,6 +173,7 @@ function SubmitEvent({ taxonomy, prefill }) {
   const [step, setStep] = useState(0);
   const [touched, setTouched] = useState({});
   const [locationTouched, setLocationTouched] = useState(false);
+  const [scheduleTouched, setScheduleTouched] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
   const [dragActive, setDragActive] = useState(false);
 
@@ -190,6 +203,7 @@ function SubmitEvent({ taxonomy, prefill }) {
     setStep(0);
     setTouched({});
     setLocationTouched(false);
+    setScheduleTouched(false);
     setErrors([]);
   };
 
@@ -230,11 +244,16 @@ function SubmitEvent({ taxonomy, prefill }) {
       ...t,
       ...Object.fromEntries(STEP_FIELD_KEYS[i].map((k) => [k, true])),
     }));
+    if (i === 0) setScheduleTouched(true);
     if (i === 1) setLocationTouched(true);
   };
 
-  const stepInvalid = (i) =>
-    i === 1 ? locationInvalid : STEP_FIELD_KEYS[i].some((k) => fieldErrors[k]);
+  const stepInvalid = (i) => {
+    if (i === 0)
+      return STEP_FIELD_KEYS[0].some((k) => fieldErrors[k]) || scheduleErrors.length > 0;
+    if (i === 1) return locationInvalid;
+    return STEP_FIELD_KEYS[i].some((k) => fieldErrors[k]);
+  };
 
   const goNext = () => {
     if (stepInvalid(step)) {
@@ -267,9 +286,17 @@ function SubmitEvent({ taxonomy, prefill }) {
     }
 
     const formData = new FormData();
-    Object.entries(fields).forEach(([k, v]) => formData.append(k, v));
+    Object.entries(fields).forEach(([k, v]) => {
+      // occurrences is an array (the multi-date schedule) — appended as JSON below,
+      // never through the generic string append (which would comma-join it).
+      if (k === 'occurrences') return;
+      formData.append(k, v);
+    });
     selectedCategories.forEach((c) => formData.append('drink_categories', c));
     formData.append('company_url', honeypot); // honeypot — server checks it
+    // Multi-date schedule (EP-6). Empty in the single-date case → the server uses
+    // the scalar start/end path (unchanged legacy behaviour).
+    formData.append('occurrences', JSON.stringify(fields.occurrences || []));
     if (imageFile) formData.append('image', imageFile);
 
     setSubmitting(true);
@@ -466,42 +493,28 @@ function SubmitEvent({ taxonomy, prefill }) {
             </div>
           </div>
 
-          <div className="row">
-            <div className="col-md-6 mb-3">
-              <label className="form-label" htmlFor="start_datetime">
-                Starts <span className="text-danger">*</span>
-              </label>
-              <input
-                id="start_datetime"
-                type="datetime-local"
-                className={`form-control${invalidClass('start_datetime')}`}
-                value={fields.start_datetime}
-                onChange={setField('start_datetime')}
-                onBlur={blur('start_datetime')}
-                required
-              />
-              <FieldError name="start_datetime" />
-            </div>
-            <div className="col-md-6 mb-3">
-              <label className="form-label" htmlFor="end_datetime">
-                Ends <span className="text-danger">*</span>
-              </label>
-              <input
-                id="end_datetime"
-                type="datetime-local"
-                className={`form-control${invalidClass('end_datetime')}`}
-                value={fields.end_datetime}
-                onChange={setField('end_datetime')}
-                onBlur={blur('end_datetime')}
-                required
-              />
-              <FieldError name="end_datetime" />
-            </div>
+          {/* Schedule: a single date by default, or an "Add another date" table for
+              multi-date events (EP-6). ScheduleFields owns the date inputs and
+              reports its own blocking errors up (like LocationFields); we surface
+              them inline within this step. The wrapping onBlur marks the block
+              touched once any schedule field loses focus. */}
+          {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
+          <div onBlur={() => setScheduleTouched(true)}>
+            <ScheduleFields
+              values={fields}
+              onChange={patchFields}
+              onValidationChange={setScheduleErrors}
+            />
           </div>
-          <p className="form-text mt-0 mb-3">
-            Enter the times in the event&apos;s own local time — that&apos;s how they
-            appear on the listing.
-          </p>
+          {scheduleTouched && scheduleErrors.length > 0 && (
+            <div className="text-danger small mb-3">
+              <ul className="mb-0 ps-3">
+                {scheduleErrors.map((m, i) => (
+                  <li key={i}>{m}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
         {/* STEP 2 — Location. Venue name + Google-validated address + country +

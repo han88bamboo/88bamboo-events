@@ -17,19 +17,27 @@ import { useState } from 'react';
 
 import { SUBMITTER_TYPES, withLegacyValue } from '@/core/constants/formOptions';
 import LocationFields from '@/components/common/LocationFields';
+import ScheduleFields from '@/components/common/ScheduleFields';
 
 // datetime-local wants 'YYYY-MM-DDTHH:MM'; the API returns full ISO strings.
 const toLocalInput = (iso) => (iso ? String(iso).slice(0, 16) : '');
 
+// Map a serialised occurrences list to the datetime-local shape ScheduleFields
+// edits. Only a genuine multi-date schedule (>1) opens the table; a single/legacy
+// date uses the scalar start/end (EP-6).
+function toLocalOccurrences(list) {
+  if (!Array.isArray(list) || list.length <= 1) return undefined;
+  return list.map((o) => ({ start: toLocalInput(o.start), end: toLocalInput(o.end) }));
+}
+
 // Pure: build the per-field error map (D2, presentational only — the shared
 // validate_submission on the server stays the authority). Mirrors SubmitEvent
-// minus the image (edits carry the image forward).
+// minus the image (edits carry the image forward). The date entry is owned by
+// ScheduleFields, which reports its own errors up, so date keys are not here.
 function buildFieldErrors(fields, selectedCategories) {
   const fe = {};
   if (!fields.name.trim()) fe.name = 'Event name is required.';
   if (!fields.submitter_email.trim()) fe.submitter_email = 'Your email is required.';
-  if (!fields.start_datetime) fe.start_datetime = 'Start date/time is required.';
-  if (!fields.end_datetime) fe.end_datetime = 'End date/time is required.';
   if (!fields.country.trim()) fe.country = 'Country is required.';
   if (!fields.city.trim()) fe.city = 'City is required.';
   if (!fields.event_format) fe.event_format = 'Event format is required.';
@@ -49,6 +57,7 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
     contact_email: src.contact_email || '',
     start_datetime: toLocalInput(src.start_datetime),
     end_datetime: toLocalInput(src.end_datetime),
+    occurrences: toLocalOccurrences(src.occurrences),
     venue_name: src.venue_name || '',
     venue_address: src.venue_address || '',
     country: src.country || '',
@@ -69,8 +78,10 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState([]); // server/network errors (top alert)
   const [locationErrors, setLocationErrors] = useState([]); // from LocationFields
+  const [scheduleErrors, setScheduleErrors] = useState([]); // from ScheduleFields (EP-6)
   const [touched, setTouched] = useState({});
   const [locationTouched, setLocationTouched] = useState(false);
+  const [scheduleTouched, setScheduleTouched] = useState(false);
   const [done, setDone] = useState(false);
 
   // Recomputed each render from the single source of state (D2, pure).
@@ -106,12 +117,13 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
     // Client mirror of the required rules + LocationFields' own errors, shown
     // inline; reveal them and bail if anything is still invalid (the server
     // re-validates regardless).
-    if (Object.keys(fieldErrors).length || locationInvalid) {
+    if (Object.keys(fieldErrors).length || locationInvalid || scheduleErrors.length) {
       setTouched((t) => ({
         ...t,
         ...Object.fromEntries(Object.keys(fieldErrors).map((k) => [k, true])),
       }));
       setLocationTouched(true);
+      setScheduleTouched(true);
       return;
     }
     setSubmitting(true);
@@ -202,18 +214,25 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
           </div>
         </div>
 
-        <div className="row">
-          <div className="col-md-6 mb-3">
-            <label className="form-label" htmlFor="start_datetime">Starts *</label>
-            <input id="start_datetime" type="datetime-local" className={`form-control${invalidClass('start_datetime')}`} value={fields.start_datetime} onChange={setField('start_datetime')} onBlur={blur('start_datetime')} required />
-            <FieldError name="start_datetime" />
-          </div>
-          <div className="col-md-6 mb-3">
-            <label className="form-label" htmlFor="end_datetime">Ends *</label>
-            <input id="end_datetime" type="datetime-local" className={`form-control${invalidClass('end_datetime')}`} value={fields.end_datetime} onChange={setField('end_datetime')} onBlur={blur('end_datetime')} required />
-            <FieldError name="end_datetime" />
-          </div>
+        {/* Schedule: single date by default or a multi-date table (EP-6). Owned by
+            ScheduleFields, which reports its own errors up; surfaced inline below. */}
+        {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
+        <div onBlur={() => setScheduleTouched(true)}>
+          <ScheduleFields
+            values={fields}
+            onChange={patchFields}
+            onValidationChange={setScheduleErrors}
+          />
         </div>
+        {scheduleTouched && scheduleErrors.length > 0 && (
+          <div className="text-danger small mb-3">
+            <ul className="mb-0 ps-3">
+              {scheduleErrors.map((m, i) => (
+                <li key={i}>{m}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Venue name + Google-validated address + country + dependent region +
             city (EP-2), shared with the submit form via LocationFields. Its own

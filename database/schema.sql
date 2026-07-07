@@ -222,6 +222,27 @@ CREATE TABLE files (
     is_public        BOOLEAN NOT NULL DEFAULT TRUE
 );
 
+-- event_occurrences — the per-date schedule of a version (EP-6 multi-date
+-- scheduling). One row per explicit date the event runs, each with its own
+-- start/end instant. This is a HAND-ENTERED schedule of occurrences, NOT
+-- rule-based recurrence (no RRULE). event_versions.start_datetime/end_datetime are
+-- kept as a DERIVED SUMMARY (MIN(starts_at) / MAX(ends_at)); the validator/persist
+-- layer is the single writer of both the scalars and these rows so they never
+-- drift, which keeps the large existing read surface (listing filter/sort,
+-- is_past, upcoming/past toggle, widget, hourly auto-expire) reading the scalars
+-- unchanged. Backward-compatible + additive: legacy versions have ZERO occurrence
+-- rows and reads treat "no rows" as a single implied occurrence from the scalars
+-- (no backfill). The FK is ON DELETE CASCADE — NOT the app-wide SET NULL — because
+-- an occurrence is meaningless without its immutable version snapshot and must be
+-- re-snapshotted per version, exactly like the country_regions rationale above.
+CREATE TABLE event_occurrences (
+    id               SERIAL PRIMARY KEY,
+    event_version_id INTEGER NOT NULL REFERENCES event_versions(id) ON DELETE CASCADE,
+    starts_at        TIMESTAMPTZ NOT NULL,
+    ends_at          TIMESTAMPTZ NOT NULL,
+    sort_order       INTEGER NOT NULL DEFAULT 0
+);
+
 -- event_messages — the admin⇄submitter conversation thread for a listing
 -- (post-launch feature). One row per message; the "thread" is every row for an
 -- event, oldest-first. Web-link replies only: the submitter never emails us back,
@@ -254,6 +275,7 @@ CREATE INDEX idx_magic_links_token_hash      ON magic_links (token_hash);       
 CREATE INDEX idx_files_event_version_id      ON files (event_version_id);
 CREATE INDEX idx_event_messages_event_id     ON event_messages (event_id, created_at);  -- thread reads + unread scan
 CREATE INDEX idx_country_regions_country_id ON country_regions (country_id);   -- region dropdown lookups
+CREATE INDEX idx_event_occurrences_version   ON event_occurrences (event_version_id);  -- per-version schedule reads (EP-6)
 
 -- ===========================================================================
 -- SEED DATA (non-secret). The admin user is seeded separately from env by

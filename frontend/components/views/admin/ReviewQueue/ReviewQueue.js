@@ -70,6 +70,23 @@ function PendingCard({ item, onApprove, onReject, onEdit, onMessage, busy }) {
               <dt className="col-sm-3">When</dt>
               <dd className="col-sm-9">
                 {formatDateTime(item.start_datetime)} — {formatDateTime(item.end_datetime)}
+                {/* Multi-date schedule (EP-6): show the count + each date so the
+                    reviewer sees the whole schedule before approving. */}
+                {(item.occurrences || []).length > 1 && (
+                  <>
+                    <span className="badge bg-secondary-subtle text-secondary ms-2">
+                      {item.occurrences.length} dates
+                    </span>
+                    <ul className="list-unstyled mb-0 mt-1">
+                      {item.occurrences.map((o, i) => (
+                        // eslint-disable-next-line react/no-array-index-key
+                        <li key={i}>
+                          {formatDateTime(o.start)} — {formatDateTime(o.end)}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
               </dd>
 
               <dt className="col-sm-3">Where</dt>

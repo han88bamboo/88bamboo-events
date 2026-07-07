@@ -38,11 +38,41 @@ export function eventMetaDescription(event) {
   return `${event?.name || 'Event'}${where ? ` in ${where}` : ''} — on the 88 Bamboo drinks & hospitality events board.`;
 }
 
-// Build the schema.org/Event JSON-LD object (plan §4). Includes name, startDate,
-// endDate, eventStatus, location with PostalAddress, image, and description.
-// Google reads this to render rich event results. Fields that are missing are
-// simply omitted rather than emitted empty.
-export function buildEventJsonLd(event) {
+// schema.org expects ISO-8601 dates; the API serialises TIMESTAMPTZ as RFC-1123
+// ("Tue, 28 Jul 2026 13:00:00 GMT"), so normalise via Date -> toISOString().
+function isoDate(v) {
+  if (!v) return undefined;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
+}
+
+// The location Place (PostalAddress + optional GeoCoordinates), shared across every
+// occurrence's Event. Returns undefined when there's nothing to place.
+function eventLocation(event) {
+  const address = {};
+  if (event?.venue_address) address.streetAddress = event.venue_address;
+  if (event?.city) address.addressLocality = event.city;
+  if (event?.region) address.addressRegion = event.region;
+  if (event?.postcode) address.postalCode = event.postcode;
+  if (event?.country) address.addressCountry = event.country;
+  const hasCoords = event?.latitude != null && event?.longitude != null;
+  if (!(event?.venue_name || Object.keys(address).length || hasCoords)) return undefined;
+  return {
+    '@type': 'Place',
+    ...(event?.venue_name ? { name: event.venue_name } : {}),
+    ...(hasCoords
+      ? { geo: { '@type': 'GeoCoordinates', latitude: event.latitude, longitude: event.longitude } }
+      : {}),
+    ...(Object.keys(address).length
+      ? { address: { '@type': 'PostalAddress', ...address } }
+      : {}),
+  };
+}
+
+// Build ONE schema.org/Event object for a given start/end (plan §4). Includes name,
+// startDate, endDate, eventStatus, location, image, and description. Missing fields
+// are omitted rather than emitted empty.
+function buildOneEvent(event, start, end) {
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Event',
@@ -53,48 +83,27 @@ export function buildEventJsonLd(event) {
     eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
     url: eventCanonicalUrl(event?.slug),
   };
-
-  // schema.org expects ISO-8601 dates; the API serialises TIMESTAMPTZ as RFC-1123
-  // ("Tue, 28 Jul 2026 13:00:00 GMT"), so normalise via Date -> toISOString().
-  const isoDate = (v) => {
-    if (!v) return undefined;
-    const d = new Date(v);
-    return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
-  };
-  const startDate = isoDate(event?.start_datetime);
-  const endDate = isoDate(event?.end_datetime);
+  const startDate = isoDate(start);
+  const endDate = isoDate(end);
   if (startDate) jsonLd.startDate = startDate;
   if (endDate) jsonLd.endDate = endDate;
   if (event?.image_url) jsonLd.image = [event.image_url];
   if (event?.description) jsonLd.description = event.description;
-
-  // location: a Place with a PostalAddress and, when we have them, GeoCoordinates.
-  // Only include the parts we have (EP-2 adds region/postcode + geo).
-  const address = {};
-  if (event?.venue_address) address.streetAddress = event.venue_address;
-  if (event?.city) address.addressLocality = event.city;
-  if (event?.region) address.addressRegion = event.region;
-  if (event?.postcode) address.postalCode = event.postcode;
-  if (event?.country) address.addressCountry = event.country;
-  const hasCoords = event?.latitude != null && event?.longitude != null;
-  if (event?.venue_name || Object.keys(address).length || hasCoords) {
-    jsonLd.location = {
-      '@type': 'Place',
-      ...(event?.venue_name ? { name: event.venue_name } : {}),
-      ...(hasCoords
-        ? {
-            geo: {
-              '@type': 'GeoCoordinates',
-              latitude: event.latitude,
-              longitude: event.longitude,
-            },
-          }
-        : {}),
-      ...(Object.keys(address).length
-        ? { address: { '@type': 'PostalAddress', ...address } }
-        : {}),
-    };
-  }
-
+  const location = eventLocation(event);
+  if (location) jsonLd.location = location;
   return jsonLd;
+}
+
+// Build the schema.org/Event JSON-LD (plan §4). For a single-date event this is one
+// Event object (unchanged). For a multi-date schedule (EP-6) it is an ARRAY of Event
+// objects — one per occurrence, each with its own startDate/endDate — which is
+// Google's guidance for the same event repeated on several dates.
+export function buildEventJsonLd(event) {
+  const occurrences = event?.occurrences && event.occurrences.length
+    ? event.occurrences
+    : [{ start: event?.start_datetime, end: event?.end_datetime }];
+  if (occurrences.length > 1) {
+    return occurrences.map((o) => buildOneEvent(event, o.start, o.end));
+  }
+  return buildOneEvent(event, occurrences[0].start, occurrences[0].end);
 }

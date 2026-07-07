@@ -23,7 +23,7 @@ from flask import Blueprint, jsonify, request
 from psycopg2.extras import Json
 
 from app import db_manager
-from event_versioning import create_edit_version, editable_version
+from event_versioning import create_edit_version, editable_version, fetch_occurrences
 from geo_reference import load_geo
 from magic_links import create_account_link, resolve_account_token
 from notifications import (
@@ -218,6 +218,8 @@ def event():
                 return err
             _email, ev = owned
             version = editable_version(cursor, ev["id"], ev["published_version_id"])
+            # Per-date schedule for the edit form's multi-date table (EP-6).
+            occurrences = fetch_occurrences(cursor, version["id"]) if version else []
     except psycopg2.Error:
         return jsonify({"code": 500, "error": "Database error occurred"}), 500
 
@@ -253,6 +255,9 @@ def event():
                         if version["start_datetime"] else None,
                         "end_datetime": version["end_datetime"].isoformat()
                         if version["end_datetime"] else None,
+                        # Full schedule (EP-6); [] for a legacy version — the form
+                        # then implies one row from the scalar start/end above.
+                        "occurrences": occurrences,
                         "venue_name": version["venue_name"],
                         "venue_address": version["venue_address"],
                         "country": version["country"],

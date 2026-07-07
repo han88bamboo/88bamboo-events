@@ -133,6 +133,9 @@ function EventCard({ event, view }) {
           </div>
           <div className="small text-muted">
             {formatDateRange(event.start_datetime, event.end_datetime)}
+            {/* Multi-date hint (EP-6): the card shows the full first→last range plus
+                an "N dates" count; the feed carries only the summary + count. */}
+            {event.occurrence_count > 1 && ` · ${event.occurrence_count} dates`}
           </div>
           <div className="small text-muted">
             {[event.venue_name, event.city, event.country].filter(Boolean).join(' · ')}
@@ -168,6 +171,7 @@ function EventCard({ event, view }) {
             <h3 className="event-card__title">{event.name}</h3>
             <div className="event-card__date">
               {formatDateRange(event.start_datetime, event.end_datetime)}
+              {event.occurrence_count > 1 && ` · ${event.occurrence_count} dates`}
             </div>
             {place && <div className="event-card__place">{place}</div>}
             {excerptOf(event) && <p className="event-card__excerpt">{excerptOf(event)}</p>}

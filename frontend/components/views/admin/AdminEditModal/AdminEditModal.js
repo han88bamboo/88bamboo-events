@@ -34,6 +34,9 @@ function buildContext(item, isLive) {
       contact_email: item.contact_email || '',
       start_datetime: toIso(item.start_datetime),
       end_datetime: toIso(item.end_datetime),
+      // Per-date schedule (EP-6) so the admin edit prefills the multi-date table;
+      // EditEvent opens the table only when there is more than one date.
+      occurrences: item.occurrences || [],
       venue_name: item.venue_name || '',
       venue_address: item.venue_address || '',
       country: item.country || '',

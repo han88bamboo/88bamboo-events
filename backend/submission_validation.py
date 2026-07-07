@@ -26,6 +26,10 @@ MAX_PLACE_ID_LEN = 255       # Google place_id (TEXT column; capped defensively)
 LAT_RANGE = (-90.0, 90.0)
 LNG_RANGE = (-180.0, 180.0)
 
+# Server-side cap on a listing's schedule size (EP-6 E-D6). A hand-entered
+# schedule of a few dates is the norm; this just bounds an abusive payload.
+MAX_OCCURRENCES = 50
+
 # The honeypot field: a real browser never fills it (it is visually hidden and
 # tab-skipped). Any non-empty value marks the submitter as a bot (plan §8).
 HONEYPOT_FIELD = "company_url"
@@ -90,6 +94,42 @@ def parse_datetime(value):
         return datetime.fromisoformat(value.strip())
     except (ValueError, TypeError):
         return None
+
+
+def _validate_occurrences(raw, errors):
+    """Validate an explicit multi-date schedule (EP-6 E-D6). `raw` is a list of
+    {"start", "end"} dicts (each parsed via parse_datetime). Rules: each row needs a
+    valid start AND end with start < end; the list is capped at MAX_OCCURRENCES.
+
+    Returns (occurrences, summary_start, summary_end):
+      • `occurrences` — the cleaned, start-sorted list of {"start": iso, "end": iso}
+        strings, safe to hold for the transactional persist;
+      • `summary_start` / `summary_end` — MIN(start) / MAX(end) as datetimes, the
+        DERIVED scalar summary the whole existing read surface reads (listing
+        filter/sort, is_past, auto-expire). The validator is the single writer of
+        both, so the scalars and the rows never drift.
+    Human-readable messages are appended to `errors`."""
+    if len(raw) > MAX_OCCURRENCES:
+        errors.append(f"Too many dates — a listing can have at most {MAX_OCCURRENCES}.")
+        raw = raw[:MAX_OCCURRENCES]
+    parsed = []  # list of (start_dt, end_dt)
+    for i, row in enumerate(raw, start=1):
+        row = row or {}
+        s = parse_datetime(row.get("start"))
+        e = parse_datetime(row.get("end"))
+        if not s or not e:
+            errors.append(f"Date {i}: a valid start and end time are required.")
+            continue
+        if e <= s:
+            errors.append(f"Date {i}: the end time must be after the start time.")
+            continue
+        parsed.append((s, e))
+    if not parsed:
+        # Every row was invalid (messages already emitted) — nothing to summarise.
+        return [], None, None
+    parsed.sort(key=lambda p: p[0])
+    occurrences = [{"start": s.isoformat(), "end": e.isoformat()} for s, e in parsed]
+    return occurrences, parsed[0][0], max(e for _, e in parsed)
 
 
 def validate_image(content_type, data, max_bytes=DEFAULT_MAX_IMAGE_BYTES):
@@ -179,16 +219,37 @@ def validate_submission(data, allowed_categories, allowed_formats, geo=None,
     if contact_email and not _looks_like_email(contact_email):
         errors.append("Contact email is not a valid email address.")
 
-    start_raw = _text("start_datetime")
-    end_raw = _text("end_datetime")
-    start_dt = parse_datetime(start_raw)
-    end_dt = parse_datetime(end_raw)
-    if not start_dt:
-        errors.append("A valid start date/time is required.")
-    if not end_dt:
-        errors.append("A valid end date/time is required.")
-    if start_dt and end_dt and end_dt < start_dt:
-        errors.append("End date/time cannot be before the start date/time.")
+    # --- Schedule: one or more explicit dates, each with its own start/end (EP-6).
+    # A multi-date submission sends an `occurrences` array ([{start, end}, …]); a
+    # single-date one sends the bare start_datetime/end_datetime scalars (the
+    # unchanged legacy shape). Either way we DERIVE the scalar summary here
+    # (MIN start / MAX end) — this validator is the single writer of both the
+    # summary and the occurrence rows, so they never drift.
+    raw_occurrences = data.get("occurrences")
+    if isinstance(raw_occurrences, list) and raw_occurrences:
+        occurrences, start_dt, end_dt = _validate_occurrences(raw_occurrences, errors)
+    else:
+        # Single-date path — the original scalar rules (messages unchanged so every
+        # existing caller/test still passes), normalised into one occurrence below.
+        start_raw = _text("start_datetime")
+        end_raw = _text("end_datetime")
+        start_dt = parse_datetime(start_raw)
+        end_dt = parse_datetime(end_raw)
+        if not start_dt:
+            errors.append("A valid start date/time is required.")
+        if not end_dt:
+            errors.append("A valid end date/time is required.")
+        if start_dt and end_dt and end_dt < start_dt:
+            errors.append("End date/time cannot be before the start date/time.")
+        # Normalise to one occurrence only for a positive-duration date. A
+        # degenerate start == end stays on the scalar path (no row) rather than an
+        # occurrence, so re-validating the held payload (whose occurrences the
+        # multi-date path checks with strict start < end) stays consistent with 3a.
+        occurrences = (
+            [{"start": start_dt.isoformat(), "end": end_dt.isoformat()}]
+            if start_dt and end_dt and end_dt > start_dt
+            else []
+        )
 
     country = _text("country", MAX_SHORT_LEN)
     if not country:
@@ -274,8 +335,12 @@ def validate_submission(data, allowed_categories, allowed_formats, geo=None,
         "name": name,
         "submitter_email": submitter_email,
         "contact_email": contact_email or None,
+        # Derived scalar summary (MIN start / MAX end across the occurrences).
         "start_datetime": start_dt.isoformat() if start_dt else None,
         "end_datetime": end_dt.isoformat() if end_dt else None,
+        # The per-date schedule (EP-6): [{start iso, end iso}, …], start-sorted. A
+        # single-date submission normalises to exactly one occurrence.
+        "occurrences": occurrences,
         "venue_name": _text("venue_name", MAX_VENUE_NAME_LEN) or None,
         "venue_address": venue_address or None,
         "country": country,

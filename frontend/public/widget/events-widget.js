@@ -86,7 +86,12 @@
     }
     var body = [
       h('div', { class: 'bew-name' }, [ev.name || 'Event']),
-      h('div', { class: 'bew-meta' }, [formatDate(ev.start_datetime)]),
+      // Summary start date; a multi-date event (EP-6) appends "+N more dates". The
+      // widget feed carries only the summary scalars + the occurrence count.
+      h('div', { class: 'bew-meta' }, [
+        formatDate(ev.start_datetime) +
+          (ev.occurrence_count > 1 ? ' +' + (ev.occurrence_count - 1) + ' more dates' : ''),
+      ]),
       h('div', { class: 'bew-meta' }, [
         [ev.city, ev.country].filter(Boolean).join(', '),
       ]),

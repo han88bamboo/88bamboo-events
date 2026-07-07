@@ -20,6 +20,42 @@
 # MVP scope).
 
 
+def insert_occurrences(cursor, version_id, occurrences):
+    """Snapshot a version's per-date schedule (EP-6). `occurrences` is the cleaned
+    list of {"start": iso, "end": iso} from validate_submission (start-sorted).
+    Occurrences are per-version and immutable like the version itself, so every
+    submit + edit re-inserts them against the NEW version_id (they behave like
+    drink_categories — round-tripped through the form — not like a mutated row).
+    A single-date submission has exactly one row; a legacy version has none (reads
+    imply one from the scalar summary). Runs in the caller's transaction."""
+    for i, occ in enumerate(occurrences or []):
+        cursor.execute(
+            "INSERT INTO event_occurrences ("
+            "  event_version_id, starts_at, ends_at, sort_order"
+            ") VALUES (%s, %s, %s, %s)",
+            (version_id, occ["start"], occ["end"], i),
+        )
+
+
+def fetch_occurrences(cursor, version_id):
+    """Read a version's schedule as a start-sorted list of {"start": iso, "end": iso}
+    for the edit-form prefill + the public detail page (EP-6). Returns [] for a
+    legacy version with no rows; callers imply a single occurrence from the scalar
+    summary in that case (E-D2, no backfill)."""
+    cursor.execute(
+        "SELECT starts_at, ends_at FROM event_occurrences "
+        "WHERE event_version_id = %s ORDER BY sort_order, starts_at",
+        (version_id,),
+    )
+    return [
+        {
+            "start": r["starts_at"].isoformat() if r["starts_at"] else None,
+            "end": r["ends_at"].isoformat() if r["ends_at"] else None,
+        }
+        for r in cursor.fetchall()
+    ]
+
+
 def editable_version(cursor, event_id, published_version_id):
     """The version whose content prefills an edit form / seeds a new edit: the
     live one if the event is published, otherwise the latest submitted version."""
@@ -114,6 +150,12 @@ def create_edit_version(cursor, event_id, published_version_id, cleaned,
         ),
     )
     new_version_id = cursor.fetchone()["id"]
+
+    # Re-snapshot the per-date schedule onto the NEW version (EP-6). `cleaned`
+    # always carries the current schedule (the edit forms round-trip it, so an
+    # unchanged schedule is simply re-inserted — the carry-forward), derived from
+    # the same occurrences the summary start/end above came from.
+    insert_occurrences(cursor, new_version_id, cleaned.get("occurrences"))
 
     if not is_published:
         # PRE-approval edit: move the still-authorised hold onto the new version

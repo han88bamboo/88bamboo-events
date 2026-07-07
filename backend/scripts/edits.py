@@ -29,7 +29,7 @@ import psycopg2
 from flask import Blueprint, jsonify, request
 
 from app import db_manager
-from event_versioning import create_edit_version, editable_version
+from event_versioning import create_edit_version, editable_version, fetch_occurrences
 from geo_reference import load_geo
 from magic_links import create_magic_link, mark_used, resolve_token
 from notifications import (
@@ -137,6 +137,8 @@ def context():
             if not link:
                 return jsonify({"code": 404, "error": "This edit link is invalid or has expired."}), 404
             version = editable_version(cursor, link["event_id"], link["published_version_id"])
+            # Per-date schedule for the form to prefill the multi-date table (EP-6).
+            occurrences = fetch_occurrences(cursor, version["id"]) if version else []
     except psycopg2.Error:
         return jsonify({"code": 500, "error": "Database error occurred"}), 500
 
@@ -159,6 +161,9 @@ def context():
                         if version["start_datetime"] else None,
                         "end_datetime": version["end_datetime"].isoformat()
                         if version["end_datetime"] else None,
+                        # Full schedule (EP-6); [] for a legacy version — the form
+                        # then implies one row from the scalar start/end above.
+                        "occurrences": occurrences,
                         "venue_name": version["venue_name"],
                         "venue_address": version["venue_address"],
                         "country": version["country"],
