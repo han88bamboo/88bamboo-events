@@ -360,7 +360,7 @@ function ManageEvent({ token, eventId, data, taxonomy }) {
         {/* Desktop: sticky conversation column (hidden on mobile). */}
         {hasMessages && (
           <div className="col-lg-4 d-none d-lg-block">
-            <div className="position-sticky" style={{ top: '1rem' }}>
+            <div className="position-sticky" style={{ top: '6rem' }}>
               <MessagesPanel variant="desktop" token={token} eventId={eventId} data={msg.data} onReplied={appendReply} />
             </div>
           </div>

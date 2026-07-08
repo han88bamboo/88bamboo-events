@@ -218,7 +218,7 @@ function EventDetail({ event, related = [] }) {
         {/* Desktop: sticky summary/CTA column (hidden on mobile — rendered inline
             above instead). */}
         <div className="col-lg-4 d-none d-lg-block">
-          <div className="position-sticky" style={{ top: '1rem' }}>
+          <div className="position-sticky" style={{ top: '6rem' }}>
             <EventSummaryCard {...summaryProps} />
           </div>
         </div>

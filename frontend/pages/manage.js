@@ -62,7 +62,7 @@ function ManageView({ initialSlug }) {
       </h1>
       <p className="text-muted">
         Enter your listing and the email you submitted with. We&apos;ll email you a
-        secure, one-time link to make changes. Edits are free and reviewed before
+        secure, one-time link to make changes. Edits are reviewed before
         they go live.
       </p>
       <form onSubmit={onSubmit}>
