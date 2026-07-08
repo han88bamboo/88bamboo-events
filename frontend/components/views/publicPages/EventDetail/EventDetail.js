@@ -9,7 +9,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 
 import { isPastEvent } from '../publicFormat';
-import { EventCard, truncateAtWordBoundary } from '../EventListing/EventListing';
+import { EventCard } from '../EventListing/EventListing';
 import EventSummaryCard from './EventSummaryCard';
 
 // Split a plain-text description into paragraphs (SP-1 / P1). Every newline (single
@@ -22,32 +22,11 @@ function toParagraphs(text) {
     .filter(Boolean);
 }
 
-// "Read more" collapse threshold (SP-3 / T1): only truncate once the description
-// clears this many characters, so short descriptions render in full with no toggle.
-const DESCRIPTION_COLLAPSE_LENGTH = 400;
-
-// Build the collapsed view of a paragraph array (the same model P1 renders from —
-// never the raw string) by keeping whole paragraphs until the budget is spent, then
-// trimming the last one on a word boundary via the shared card-excerpt helper.
-function collapseParagraphs(paragraphs, maxLen) {
-  const full = paragraphs.join(' ');
-  if (full.length <= maxLen) return { collapsed: paragraphs, isTruncated: false };
-
-  const collapsed = [];
-  let used = 0;
-  for (const para of paragraphs) {
-    const remaining = maxLen - used;
-    if (remaining <= 0) break;
-    if (para.length <= remaining) {
-      collapsed.push(para);
-      used += para.length;
-    } else {
-      collapsed.push(truncateAtWordBoundary(para, remaining));
-      break;
-    }
-  }
-  return { collapsed, isTruncated: true };
-}
+// "See more" collapse threshold (SPP-D9, owner: 800 chars). Only an exceptionally
+// long description collapses; at/under this length the whole description + map
+// render in full with no fade. The collapse is VISUAL (a clipped, faded region),
+// not a character-level truncation, so it wraps the description AND the map below.
+const DESCRIPTION_COLLAPSE_LENGTH = 800;
 
 function EventDetail({ event, related = [] }) {
   if (!event) return null;
@@ -66,6 +45,7 @@ function EventDetail({ event, related = [] }) {
     event.venue_address,
     event.city,
     event.region,
+    event.postcode,
     event.country,
   ]
     .filter(Boolean)
@@ -95,14 +75,14 @@ function EventDetail({ event, related = [] }) {
     : null;
 
   const paragraphs = toParagraphs(event.description);
-  const { collapsed: collapsedParagraphs, isTruncated } = collapseParagraphs(
-    paragraphs,
-    DESCRIPTION_COLLAPSE_LENGTH,
-  );
-  // Client-only toggle (SP-3 / T1). Starts collapsed on both server and client so
-  // the first client render matches the SSR markup exactly — no hydration mismatch.
+  // Collapse only an exceptionally long description (SPP-D9): the description+map
+  // block clips behind a faded, clickable "See more" region; short ones show in
+  // full with the map and no fade.
+  const isLong = (event.description || '').length > DESCRIPTION_COLLAPSE_LENGTH;
+  // Client-only toggle. Starts collapsed on both server and client so the first
+  // client render matches the SSR markup exactly — no hydration mismatch.
   const [expanded, setExpanded] = useState(false);
-  const visibleParagraphs = isTruncated && !expanded ? collapsedParagraphs : paragraphs;
+  const collapsed = isLong && !expanded;
   // Shared props for the summary/CTA card, rendered twice: inline on mobile and in
   // the sticky right column on desktop (SP-1, mirroring ManageEvent's MessagesPanel).
   const summaryProps = { event, occurrences, multiDate, where };
@@ -124,9 +104,13 @@ function EventDetail({ event, related = [] }) {
 
       <div className="row g-4">
         <div className="col-lg-8">
+          {/* Article-like title: Buenard ~32px desktop / ~26px mobile (Decision 2).
+              Now ABOVE the image (owner revision, SPP-D7 — reverses SPP-D2). */}
+          <h1 className="article-title mb-3">{event.name}</h1>
+
           {event.image_url && (
-            // Featured image ABOVE the title (Eventbrite-faithful order, SPP-D2),
-            // kept capped rather than a full-bleed banner (banner = theme, excluded).
+            // Hero image, kept capped rather than a full-bleed banner (banner =
+            // theme, excluded). Sits BELOW the title now (SPP-D7).
             <img
               src={event.image_url}
               alt={event.name}
@@ -134,9 +118,6 @@ function EventDetail({ event, related = [] }) {
               style={{ maxWidth: 600, width: '100%', objectFit: 'cover' }}
             />
           )}
-
-          {/* Article-like title: Buenard ~32px desktop / ~26px mobile (Decision 2). */}
-          <h1 className="article-title mb-3">{event.name}</h1>
 
           <div className="d-flex flex-wrap gap-1 mb-3">
             {event.event_format && <span className="badge-bamboo">{event.event_format}</span>}
@@ -149,47 +130,71 @@ function EventDetail({ event, related = [] }) {
               stack here right under the title/badges. */}
           <EventSummaryCard {...summaryProps} className="d-lg-none mb-4" />
 
-          {/* Location map (A1): a keyless Google embed placing the event by its
-              address string, plus a "Get directions" link. Only shown when we have
-              an address. EP-2 upgrades this to an exact pin from stored coords. */}
-          {mapSrc && (
+          {/* Description + map as ONE block (SPP-D8): the map sits directly below
+              the description words. When the description is exceptionally long
+              (> DESCRIPTION_COLLAPSE_LENGTH) the whole block clips behind a faded,
+              full-width "See more" region that reveals the rest of the copy AND the
+              map on click (SPP-D9); shorter descriptions show everything, no fade. */}
+          {(paragraphs.length > 0 || mapSrc) && (
             <div className="mb-4">
-              <div className="ratio ratio-16x9 rounded overflow-hidden border">
-                <iframe
-                  title={`Map showing ${event.venue_name || where}`}
-                  src={mapSrc}
-                  loading="lazy"
-                  referrerPolicy="no-referrer-when-downgrade"
-                  style={{ border: 0 }}
-                  allowFullScreen
-                />
-              </div>
-              <p className="mt-2 mb-0">
-                <a href={directionsUrl} target="_blank" rel="noopener noreferrer">
-                  Get directions ↗
-                </a>
-              </p>
-            </div>
-          )}
+              <div
+                className={`bamboo-collapsible${collapsed ? ' bamboo-collapsible--collapsed' : ''}`}
+              >
+                {paragraphs.length > 0 && (
+                  // Each newline-separated fragment is its own <p> (P1); the
+                  // paragraph gap now comes from a scoped .bamboo-prose p rule
+                  // (Tailwind Preflight had zeroed the default margin — SPP-D10).
+                  <div className="bamboo-prose">
+                    {paragraphs.map((para, i) => (
+                      // eslint-disable-next-line react/no-array-index-key
+                      <p key={i}>{para}</p>
+                    ))}
+                  </div>
+                )}
 
-          {paragraphs.length > 0 && (
-            // Each newline-separated fragment is its own <p> (P1) so a single return
-            // reads as a spaced paragraph — natural rhythm from the default <p>
-            // margin, no themed styling. Collapsed to DESCRIPTION_COLLAPSE_LENGTH by
-            // default (SP-3 / T1); short descriptions never truncate, so no toggle
-            // renders for them.
-            <div className="bamboo-prose mb-4">
-              {visibleParagraphs.map((para, i) => (
-                // eslint-disable-next-line react/no-array-index-key
-                <p key={i}>{para}</p>
-              ))}
-              {isTruncated && (
+                {/* Location map (A1): a keyless Google embed placing the event by
+                    its address string, plus a "Get directions" link. Only shown
+                    when we have an address. EP-2 upgrades this to an exact pin from
+                    stored coords. */}
+                {mapSrc && (
+                  <div className="mt-4">
+                    <div className="ratio ratio-16x9 rounded overflow-hidden border">
+                      <iframe
+                        title={`Map showing ${event.venue_name || where}`}
+                        src={mapSrc}
+                        loading="lazy"
+                        referrerPolicy="no-referrer-when-downgrade"
+                        style={{ border: 0 }}
+                        allowFullScreen
+                      />
+                    </div>
+                    <p className="mt-2 mb-0">
+                      <a href={directionsUrl} target="_blank" rel="noopener noreferrer">
+                        Get directions ↗
+                      </a>
+                    </p>
+                  </div>
+                )}
+
+                {collapsed && (
+                  // The faded region itself is the click target (SPP-D9) — not a
+                  // tiny button; clicking reveals the rest of the copy + the map.
+                  <button
+                    type="button"
+                    className="bamboo-collapsible__more"
+                    onClick={() => setExpanded(true)}
+                  >
+                    See more
+                  </button>
+                )}
+              </div>
+              {isLong && expanded && (
                 <button
                   type="button"
-                  className="btn btn-link btn-sm p-0 small text-decoration-none"
-                  onClick={() => setExpanded((v) => !v)}
+                  className="btn btn-link btn-sm p-0 small text-decoration-none mt-2"
+                  onClick={() => setExpanded(false)}
                 >
-                  {expanded ? 'Show less' : 'Read more'}
+                  See less
                 </button>
               )}
             </div>

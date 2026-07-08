@@ -143,6 +143,43 @@ exist and are reusable.
   title + image + description + (single) date, and the two-column layout must degrade to a sensible
   single column when the summary panel would be near-empty (see SP-1 checklist).
 
+### 3b. Revision decisions (owner, 2026-07-08, POST-SP-4 review → Phase SP-5)
+After walking the live SP-1→SP-4 result the owner requested the following. These are **content/layout
+revisions** and two of them (SPP-D9, SPP-D10) **deliberately cross the original §0 "no new CSS"
+guardrail** — that guardrail is relaxed for this round by explicit owner authorisation, and the new
+CSS is kept minimal + scoped.
+
+- **SPP-D7 — Title ABOVE the image (REVERSES SPP-D2).** On review the owner chose the article
+  convention over Eventbrite's image-first order. Left-column order becomes **title → image → badges →
+  (mobile card) → description+map → bottom CTA**. Resolves the [OPEN] image-order item flagged in §6.
+- **SPP-D8 — Map moves BELOW the description, in the SAME block.** The keyless Google-embed map no
+  longer sits above the description; it renders directly under the description words inside one wrapper
+  so the two read as a single "about this event" block.
+- **SPP-D9 — "See more" becomes a FADED, CLICKABLE REGION (not a tiny button); threshold 800 chars.**
+  The SP-3 `btn-link` "Read more" is replaced by a full-width faded region overlaying the clipped
+  content. It appears **only when the description exceeds 800 chars** (up from 400); a slightly-long
+  description is clipped slightly. Because the map now lives in the same block (SPP-D8), clicking "See
+  more" reveals the rest of the description **and** the map. Short descriptions show everything with no
+  fade. **Adds `.bamboo-collapsible*` CSS + a gradient** (guardrail-crossing, owner-authorised).
+- **SPP-D10 — Paragraph spacing actually applied (P1 follow-up / real bug).** SP-1's P1 split the
+  description into `<p>` but the spacing never rendered: Tailwind's Preflight resets `<p>` margins to 0
+  and nothing in `.bamboo-prose` restored them, so paragraphs render as a clump. Fix = a scoped
+  `.bamboo-prose p { margin: 0 0 17.5px; }` (storefront rhythm) + `:last-child` reset. Guardrail-
+  crossing CSS add, owner-authorised. (SP-4's "no theme drift" tick predated this decision — the CSS
+  was byte-identical then; SP-5 knowingly introduces the first scoped additions.)
+- **SPP-D11 — Same-day date rendering.** The multi-date list repeated the date on both ends of a
+  same-day occurrence ("Fri, 17 Jul 2026, 12:00 — Fri, 17 Jul 2026, 22:00"). `formatDateRange` now
+  collapses a same-UTC-day range to "Fri, 17 Jul 2026, 12:00 — 22:00" and keeps the full end date only
+  when the occurrence crosses midnight (overnight). Deterministic (UTC) → hydration-safe; benefits
+  every date-range surface (listing cards, ManageEvent, MyEvents, summary card).
+- **SPP-D12 — Schema audit (owner asked "is there info that should be presented?").** Compared
+  `event_versions` (schema.sql) + `_PUBLIC_COLUMNS` (events.py) against what the page renders. Finding:
+  the page already surfaces **every meaningful public field**. Only unshown public column = **`postcode`**
+  → now appended to the "Where" address line. `submission_type` exists but is internal (not in
+  `_PUBLIC_COLUMNS`, free-form MVP channel) — not public-facing, left out. Everything else
+  (version_number, approval_status, reviewed_at, rejection_reason, submitter_email, current_status,
+  archived, republish_count) is admin/private and correctly not shown.
+
 ---
 
 ## 4. Ripple map (files each phase touches)
@@ -268,6 +305,29 @@ exist and are reusable.
   (SP-1/SP-3 change only visible placement; SP-2 adds a read but emits no new page data). → verify by
   code inspection + `next build`. *(verified — see round log.)*
 
+### Phase SP-5 — Post-review revisions (SPP-D7…D12)
+- [ ] **Title above image (SPP-D7).** Reorder the `col-lg-8` head: `<h1>` before `<img>`. → verify at
+  both viewports: title renders above the hero image, badges still below it.
+- [ ] **Map below the description, same block (SPP-D8).** Move the map `iframe`/directions out from
+  above the description into a shared wrapper, rendered after the paragraphs. → verify: map appears
+  under the copy; "Get directions" intact; legacy (address-string) + coord pins both still work.
+- [ ] **Faded "See more" region, 800-char threshold (SPP-D9).** Replace the `btn-link` toggle with a
+  `.bamboo-collapsible` wrapper + a `.bamboo-collapsible__more` gradient region; collapse only when
+  `description.length > 800`; clicking reveals the rest of the copy **and** the map; add a "See less".
+  → verify: long fixture collapses with a fade over clipped copy+map; clicking expands both; a ~short
+  (<800) description shows everything with no fade; no hydration mismatch (collapsed on server+client).
+- [ ] **Paragraph spacing fix (SPP-D10).** Add scoped `.bamboo-prose p` bottom margin (+ `:last-child`
+  reset). → verify by `preview_inspect`: `.bamboo-prose p` `margin-bottom` is now non-zero (17.5px),
+  multi-paragraph copy shows even gaps, single-paragraph unchanged.
+- [ ] **Same-day date formatting (SPP-D11).** Enhance `formatDateRange` (same-UTC-day → "start —
+  endTime"; overnight → full both). → verify: a same-day occurrence renders one date; a cross-midnight
+  range keeps both dates; listing/manage/my-events unaffected visually except the collapse; `next build`
+  clean (no hydration warning).
+- [ ] **Add `postcode` to Where (SPP-D12).** Insert `event.postcode` into the `where` compose. →
+  verify: an event with a postcode shows it in the address line; one without still renders cleanly.
+- [ ] `next build` clean; walked at **both viewports** on the real docker stack; console clean. → tick
+  + round-log entry.
+
 ---
 
 ## 6. Blockers / questions for the owner
@@ -279,9 +339,9 @@ exist and are reusable.
   **not** new icons (icons = §7 excluded, opt-in later).
 - **[RESOLVED 2026-07-08]** CTA (SPP-D4): in the summary panel **and** kept at the bottom; no floating bar.
 - **[RESOLVED 2026-07-08]** Optional adds (SPP-D5): More-events + Read-more IN; Show-map OUT.
-- **[OPEN — owner, on review]** Image **above** vs **below** the title: this plan promotes it above
-  (Eventbrite order) per "follow how Eventbrite does it," but it is a one-line flip if you'd rather keep
-  our title-first article convention. Flag on the SP-1 walkthrough.
+- **[RESOLVED 2026-07-08, post-SP-4]** Image **above** vs **below** the title: on review the owner chose
+  **title-first** (our article convention) — see **SPP-D7**. SP-1 had shipped image-first (SPP-D2); SP-5
+  reverses it.
 - **[OPEN — owner, optional later]** Eventbrite-style facts **icons** (calendar/pin/person): excluded as
   an icon-style/theme change; say the word if you want them and we'll treat it as a separate theme item.
 

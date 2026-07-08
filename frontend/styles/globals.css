@@ -139,6 +139,53 @@ a:focus {
   text-decoration: underline;
   text-decoration-color: var(--bamboo-green-link);
 }
+/* Paragraph rhythm inside prose (SPP-D10). Tailwind's Preflight zeroes <p>
+   margins, so the split-paragraph description (SP-1/P1) otherwise renders as one
+   clump; restore the storefront's 17.5px paragraph gap, scoped to prose only. */
+.bamboo-prose p {
+  margin: 0 0 17.5px;
+}
+.bamboo-prose p:last-child {
+  margin-bottom: 0;
+}
+
+/* Collapsible description+map block with a faded, clickable "See more" region
+   (SPP-D9) — applied only when a description is exceptionally long (> 800 chars).
+   The fade is a full-width click target, not a small button: it dissolves the
+   clipped content (the tail of the copy AND the map below it) into the page
+   background, and clicking reveals everything. */
+.bamboo-collapsible {
+  position: relative;
+}
+.bamboo-collapsible--collapsed {
+  max-height: 22rem;
+  overflow: hidden;
+}
+.bamboo-collapsible__more {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: block;
+  width: 100%;
+  padding: 5rem 0 0.5rem;
+  border: 0;
+  /* transparent → page bg; explicit rgba (not `transparent`) so Safari doesn't
+     fade through grey. */
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0) 0%,
+    var(--bamboo-bg) 70%
+  );
+  color: var(--bamboo-green-link);
+  font-family: var(--font-body);
+  font-size: 14px;
+  text-align: center;
+  cursor: pointer;
+}
+.bamboo-collapsible__more:hover {
+  text-decoration: underline;
+}
 
 /* ============================================================================
    BUTTONS — storefront .btn, delivered as .bamboo-btn so Bootstrap's own .btn
