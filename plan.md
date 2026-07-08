@@ -415,6 +415,7 @@ Split into two rounds: **4A = admin auth + review queue + approve/reject** (done
 - [ ] One real USD 5 submission (refund after)
 - [ ] Homepage widget pasted into the Shopify theme
   - [x] Alternate rotating-list widget built: `frontend/public/widget/events-list-widget.js` uses the same `/events/widget` feed, shows at most 3 events, and rotates to the next batch every 5 seconds by default; paste-in snippet documented in `frontend/public/widget/README.md`.
+  - [x] Rotating single-row card widget built: `frontend/public/widget/events-single-row-widget.js` mirrors the grid-widget cards, shows one responsive row of 4/3/2/1 cards without stacking, and rotates through the feed in batches every 5 seconds by default; paste-in and local-test snippets documented in `frontend/public/widget/README.md`.
   - [x] Widget image/category pass: both the original grid widget and rotating-list widget render event images plus drink-category pills from the same feed.
 - [ ] Monitoring habit: expiring-soon countdown + daily digest
 

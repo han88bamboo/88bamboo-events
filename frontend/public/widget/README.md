@@ -17,6 +17,12 @@ the events API and link to the listing pages on the apex domain.
   `https://88bamboo.co/a/events/widget/events-list-widget.js`. It shows at most
   3 events at a time and rotates to the next batch every 5 seconds by default.
   Rows show the event image, date, location, format, and drink-category pills.
+- **Rotating single-row widget:** `events-single-row-widget.js` (this folder).
+  Served at
+  `https://88bamboo.co/a/events/widget/events-single-row-widget.js`. It uses the
+  grid widget's card design in one non-wrapping row: 4 cards when space allows,
+  then 3, 2, or 1 as its container narrows. It rotates through the remaining
+  events every 5 seconds by default.
 - **Not part of Next.js routing.** It is plain vanilla JS the browser runs
   inside the Shopify theme — no React, no iframe, no build step.
 - **Data source:** `GET https://events-api.88bamboo.co/events/widget` — an
@@ -72,6 +78,33 @@ defaults baked into the script:
 | `data-interval-ms` | `5000`                           | Rotation interval in milliseconds.               |
 | `data-title`       | *(none)*                         | Optional heading above the list.                 |
 
+## Rotating single-row paste-in snippet (Shopify theme)
+
+Add a **Custom Liquid** section (or edit a template) and paste:
+
+```html
+<div id="bamboo-events-single-row-widget"
+     data-api="https://events-api.88bamboo.co"
+     data-site="https://88bamboo.co"
+     data-limit="24"
+     data-max-cards="4"
+     data-title="Upcoming events"
+     data-interval-ms="5000"></div>
+<script src="https://88bamboo.co/a/events/widget/events-single-row-widget.js" defer></script>
+```
+
+All `data-*` attributes are **optional** and fall back to the production
+defaults baked into the script:
+
+| Attribute          | Default                          | Meaning                                          |
+|--------------------|----------------------------------|--------------------------------------------------|
+| `data-api`         | `https://events-api.88bamboo.co` | Public events API origin (the feed source).      |
+| `data-site`        | `https://88bamboo.co`            | Apex site; card links become `…/a/events/<slug>`. |
+| `data-limit`       | `24`                             | Max events fetched for rotation (backend caps at 24). |
+| `data-max-cards`   | `4`                              | Maximum cards in the row; capped at 4.           |
+| `data-interval-ms` | `5000`                           | Rotation interval in milliseconds.               |
+| `data-title`       | *(none)*                         | Optional heading above the row.                  |
+
 ## Local testing
 
 With the local stack up (`docker compose up`), point the snippet at the local
@@ -96,6 +129,19 @@ Rotating list local variant:
      data-title="Upcoming events"
      data-interval-ms="5000"></div>
 <script src="http://localhost:8080/a/events/widget/events-list-widget.js" defer></script>
+```
+
+Rotating single-row local variant:
+
+```html
+<div id="bamboo-events-single-row-widget"
+     data-api="http://localhost:5001"
+     data-site="http://localhost:8080"
+     data-limit="24"
+     data-max-cards="4"
+     data-title="Upcoming events"
+     data-interval-ms="5000"></div>
+<script src="http://localhost:8080/a/events/widget/events-single-row-widget.js" defer></script>
 ```
 
 (Only published events appear — approve at least one submission first.)
