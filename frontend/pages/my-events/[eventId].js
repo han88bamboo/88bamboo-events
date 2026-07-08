@@ -10,6 +10,7 @@ import { Main } from '@/components/layouts';
 import ManageEvent from '@/components/views/publicPages/ManageEvent';
 import { accountService } from '@/core/services/account';
 import { submissionsService } from '@/core/services/submissions';
+import { dynamicRouteParam } from '@/core/utils/routeParams';
 import { verifyProxyRequest } from '@/core/utils/shopifyProxy';
 
 export async function getServerSideProps(ctx) {
@@ -17,7 +18,7 @@ export async function getServerSideProps(ctx) {
   if (!valid) return { notFound: true };
 
   const token = ctx.query.token ? String(ctx.query.token) : '';
-  const eventId = ctx.params.eventId;
+  const eventId = dynamicRouteParam(ctx, 'eventId');
   if (!token) return { notFound: true };
 
   let data = null;
