@@ -254,17 +254,19 @@ exist and are reusable.
 - [x] `next build` clean; walked at both viewports. → tick + round-log entry.
 
 ### Phase SP-4 — Regression / verification gate
-- [ ] **Both viewports, real data:** desktop shows content-left + summary-right (sticky); mobile shows
+- [x] **Both viewports, real data:** desktop shows content-left + summary-right (sticky); mobile shows
   one column with the summary inline under the title/image; image-above-title; CTA in panel + bottom;
-  More-events row present; description truncated with a working toggle.
-- [ ] **Legacy / sparse events:** an event with no organiser, no coords (address-string map fallback
+  More-events row present; description truncated with a working toggle. *(verified — see round log.)*
+- [x] **Legacy / sparse events:** an event with no organiser, no coords (address-string map fallback
   intact), single date, no `link`, and a short description renders cleanly at both viewports.
-- [ ] **No theme drift:** typography (`article-title`/`bamboo-prose`), colours, badges, and buttons are
+  *(verified — see round log.)*
+- [x] **No theme drift:** typography (`article-title`/`bamboo-prose`), colours, badges, and buttons are
   visually identical to `main`; diff introduces **no** new themed CSS. → verify by `preview_inspect` on
-  title/prose/badge/button computed styles vs a pre-change capture.
-- [ ] **No data/SEO change:** JSON-LD, `<Head>`, canonical, and the widget/listing feeds are untouched
+  title/prose/badge/button computed styles vs a pre-change capture. *(verified — `globals.css` byte-for-byte
+  identical across the range, plus live computed-style spot-check; see round log.)*
+- [x] **No data/SEO change:** JSON-LD, `<Head>`, canonical, and the widget/listing feeds are untouched
   (SP-1/SP-3 change only visible placement; SP-2 adds a read but emits no new page data). → verify by
-  code inspection + `next build`.
+  code inspection + `next build`. *(verified — see round log.)*
 
 ---
 
@@ -385,3 +387,46 @@ _Append one entry per working session: date, phase touched, what shipped, decisi
   console clean both times (no hydration warnings); reflow checked at 360px mobile — same collapsed
   markup, no overflow. **No new deps, no backend/schema/data change, no themed CSS.** **Next: SP-4**
   (both-viewports regression gate, real data, owner walkthrough).
+- **2026-07-08 — SP-4 regression gate PASSED, no code changes needed.** Verification-only session
+  against the **real docker+backend stack** (not a throwaway fixture, per the checklist's explicit ask).
+  **Infra discovery (not a bug in this plan's diff):** the local docker `events-api` image and `events`
+  DB volume both predated the already-shipped-to-`main` EP-2/EP-6/EP-7 commits, so the API was silently
+  returning events **without** `organiser_name`/`latitude`/`longitude`/`occurrences` — the exact fields
+  this plan promotes into the summary card. Fixed the *environment*, not the code: hand-applied the three
+  additive, idempotent migrations (`database/migrations/ep2-location.sql`, `ep6-occurrences.sql`,
+  `ep7-organiser.sql`) to the local db and `docker compose build events-api && docker compose up -d
+  events-api` to pick up the current backend code. This reconfirms the existing memory note that
+  **prod** likely still needs the same two hand-applied migrations (ep6/ep7) — unchanged by this session,
+  just re-surfaced by hitting the identical symptom locally. **1. Both viewports, real data:** ran a local
+  `next dev` (port 3000) wired via `frontend/.env.local` (gitignored, deleted after this session) to the
+  docker backend on `localhost:5001`, since `.env.local` is required for `next dev` outside docker but
+  docker's own `events-web` already occupies port 8080. Inserted two real DB rows (also deleted after
+  verification): **`sp4-full-featured-tasting-singapore`** (organiser, coords, 3-date schedule, a
+  3-paragraph >400-char description, `link`, `image_url`). Walked desktop (1280px) — two-column
+  content-left/sticky-summary-right, image above title, badges, "3 dates" schedule list, Where/Organised
+  by/Contact/CTA all present in the card, map (coord-pin), description collapsed to 2 of 3 paragraphs
+  with a working "Read more" (clicked it — DOM confirmed all 3 paragraphs + "Show less"), bottom CTA,
+  "More events" row (2 cards, the other two DB events). Walked mobile (375px) — single column,
+  image-title-badges-inline summary card-map-description-CTA, no sticky rail. Console clean both times.
+  **2. Legacy/sparse event:** inserted **`sp4-legacy-sparse-meetup-singapore`** — no `organiser_name`, no
+  coords (confirmed the map iframe falls back to the address-string query), a single date (plain
+  `formatDateRange` row, no "N dates" heading), no `link`, a ~80-char description. Verified via
+  `preview_snapshot` at both viewports: no "Organised by" row, no "Contact" row, **no CTA button anywhere**
+  (panel or bottom), no stray "Read more" toggle, no empty labels, no broken layout — collapses exactly as
+  SPP-D6 specified. **3. No theme drift:** `git diff c2d307e~1 4d4ca3b -- frontend/styles/globals.css`
+  confirmed the file is **byte-for-byte identical** before vs. after SP-1-SP-3 (no diff output at all) —
+  the strongest possible form of this check. Backed it up with a live `preview_inspect` spot-check of
+  `.article-title` (Buenard 32px/400/`rgb(61,66,70)`), `.bamboo-prose p` (Georgia 16px/24px line-height),
+  `.badge-bamboo` (Buenard 12px, brand green-on-mint), and `.bamboo-btn` (Buenard 14px, brand green
+  outline) on the live full-featured page — all consistent with the existing theme, as guaranteed by the
+  untouched CSS. **4. No data/SEO change:** `git diff c2d307e~1 4d4ca3b -- frontend/pages/[slug].js`
+  shows the **only** diff is the SP-2 `related` fetch + prop-threading; the `<Head>` block (title, meta
+  description, canonical, OG tags, JSON-LD `<script>`) is untouched line-for-line, and
+  `frontend/core/utils/seo.js` has **zero** diff across the same range. `npm run build` (production,
+  `next build --webpack`) completed clean — `/[slug]` still compiles as a dynamic SSR route, no
+  type/build errors. **Outcome: all four SP-4 gate items pass; no code changes were needed** (verification
+  surfaced a local-environment data gap, not an application bug). Cleaned up after: deleted both test DB
+  rows, deleted `frontend/.env.local`, reverted `.claude/launch.json` to its prior state (git status
+  confirms a clean tree). **This closes the SP-1-SP-4 body of work — ready for owner sign-off and merge.**
+  Reminder for the owner: prod still needs the ep2/ep6/ep7 migrations hand-applied (pre-existing, unrelated
+  to this plan) before promoted fields will show there.
