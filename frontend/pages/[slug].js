@@ -45,10 +45,22 @@ export async function getServerSideProps(ctx) {
     };
   }
 
-  return { props: { event } };
+  // SP-2 "More events" row: a small set of OTHER upcoming events, soonest-first.
+  // We over-fetch by one (the current event may be in the list) then drop it and
+  // cap at 6. Best-effort only — a failure here must NEVER break the detail page,
+  // so it degrades to an empty list and the row simply hides.
+  let related = [];
+  try {
+    const upcoming = await eventsService.getListing({ when: 'upcoming', limit: 7 });
+    related = upcoming.filter((e) => e.slug !== event.slug).slice(0, 6);
+  } catch {
+    related = [];
+  }
+
+  return { props: { event, related } };
 }
 
-function EventDetailPage({ event }) {
+function EventDetailPage({ event, related }) {
   const canonical = eventCanonicalUrl(event.slug);
   const description = eventMetaDescription(event);
   const jsonLd = buildEventJsonLd(event);
@@ -73,7 +85,7 @@ function EventDetailPage({ event }) {
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </Head>
-      <WithLayout layout={Main} component={EventDetail} event={event} />
+      <WithLayout layout={Main} component={EventDetail} event={event} related={related} />
     </>
   );
 }

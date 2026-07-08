@@ -8,6 +8,7 @@
 import Link from 'next/link';
 
 import { isPastEvent } from '../publicFormat';
+import { EventCard } from '../EventListing/EventListing';
 import EventSummaryCard from './EventSummaryCard';
 
 // Split a plain-text description into paragraphs (SP-1 / P1). Every newline (single
@@ -20,7 +21,7 @@ function toParagraphs(text) {
     .filter(Boolean);
 }
 
-function EventDetail({ event }) {
+function EventDetail({ event, related = [] }) {
   if (!event) return null;
   const past = isPastEvent(event);
   const categories = event.drink_categories || [];
@@ -170,6 +171,21 @@ function EventDetail({ event }) {
           </div>
         </div>
       </div>
+
+      {/* "More events" related row (SP-2 / R1) — reuses the listing's grid
+          EventCard so it's byte-for-byte the same card, no theme change. Placed
+          before the organiser edit-link footer, and hidden entirely when the SSR
+          fetch returned nothing (empty or failed → related=[]). */}
+      {related.length > 0 && (
+        <section className="mt-5">
+          <h2 className="article-title h4 mb-3">More events</h2>
+          <div className="row">
+            {related.map((e) => (
+              <EventCard key={e.event_id} event={e} view="grid" />
+            ))}
+          </div>
+        </section>
+      )}
 
       <hr className="my-4" />
       <p className="text-muted small">

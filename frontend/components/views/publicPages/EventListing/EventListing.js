@@ -107,7 +107,9 @@ function excerptOf(event) {
   return `${(lastSpace > 60 ? cut.slice(0, lastSpace) : cut).trim()}…`;
 }
 
-function EventCard({ event, view }) {
+// Exported so the detail page's "More events" row (SP-2) can reuse the exact same
+// card rather than duplicating it — it only needs fields already in _PUBLIC_COLUMNS.
+export function EventCard({ event, view }) {
   const past = isPastEvent(event);
   const href = `/${event.slug}`; // basePath '/a/events' is prepended by next/link
   const categories = event.drink_categories || [];

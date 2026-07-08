@@ -224,16 +224,25 @@ exist and are reusable.
 - [x] `next build` clean; walked at **both viewports**; console clean (no errors). → ticked; round-log below.
 
 ### Phase SP-2 — "More events" related row (R1)
-- [ ] **SSR list.** In [`pages/[slug].js`](frontend/pages/[slug].js) `getServerSideProps`, after the
+- [x] **SSR list.** In [`pages/[slug].js`](frontend/pages/[slug].js) `getServerSideProps`, after the
   event resolves, call `eventsService.getListing({ … })` for a small set of **other** upcoming events
   (exclude the current `slug`, cap ~3–6), pass as a `related` prop. → verify: page still 404s correctly
-  for unknown slugs; a fetch failure degrades to `related: []` (never breaks the page).
-- [ ] **Export `EventCard`** from [`EventListing.js`](frontend/components/views/publicPages/EventListing/EventListing.js)
+  for unknown slugs; a fetch failure degrades to `related: []` (never breaks the page). *(done — fetches
+  `getListing({ when: 'upcoming', limit: 7 })` AFTER the notFound/canonical guards, over-fetches by one,
+  drops the current slug, caps at 6; wrapped in try/catch → `related: []` on failure. Unknown-slug 404
+  path is unchanged since the fetch runs only after the event resolves.)*
+- [x] **Export `EventCard`** from [`EventListing.js`](frontend/components/views/publicPages/EventListing/EventListing.js)
   (surgical `export`, no duplication) and render a "More events" row (reuse the grid `view`) in
   `EventDetail` **before** the edit-link footer
   ([`:178`](frontend/components/views/publicPages/EventDetail/EventDetail.js:178)). Hidden entirely when
   `related` is empty. → verify: cards link correctly (`/<slug>`), theme unchanged, both viewports.
-- [ ] `next build` clean; walked at both viewports. → tick + round-log entry.
+  *(done — `EventCard` now `export`ed (module still `export default`s `EventListing`, no duplication);
+  the row is a `<section className="mt-5">` with an `<h2 className="article-title h4">More events</h2>`
+  + `<div className="row">` of grid `EventCard`s, placed before the `<hr>`/edit footer, gated on
+  `related.length > 0` with a defensive `related = []` default prop.)*
+- [x] `next build` clean; walked at both viewports. → tick + round-log entry. *(build clean; verified via
+  a throwaway fixture — desktop 3× 356px cards, mobile 3× full-width stacked, correct `/a/events/<slug>`
+  links, no theme drift; fixture deleted.)*
 
 ### Phase SP-3 — "Read more" description truncation (T1)
 - [ ] **Collapse the description** ([`:159–163`](frontend/components/views/publicPages/EventDetail/EventDetail.js:159)):
@@ -326,3 +335,27 @@ _Append one entry per working session: date, phase touched, what shipped, decisi
   image→title→badges→inline card, 3 single-return lines → 3 paragraphs, CTA in both places, console
   clean. **No new deps, no backend/schema/data change, no themed CSS.** Owner-run: the live page on the
   docker+backend stack. **Next: SP-2** (More-events row). Not yet committed (awaiting owner go-ahead).
+- **2026-07-08 — SP-2 shipped (More-events row).** **Delivered** the R1 related row with a single SSR
+  read and full reuse of the listing card — no backend/schema/data change, no themed CSS.
+  **`getServerSideProps`** ([`pages/[slug].js`](frontend/pages/[slug].js)) now, *after* the event
+  resolves and *after* the notFound/canonical guards, fetches
+  `eventsService.getListing({ when: 'upcoming', limit: 7 })`, drops the current slug, and caps at 6 →
+  passed as a new `related` prop (threaded through `WithLayout`). The fetch is wrapped in try/catch and
+  degrades to `related: []`, so a listing-API hiccup never breaks the detail page, and the unknown-slug
+  404 path is untouched (the read runs only for a resolved event). **`EventCard`** is now a surgical
+  named `export` from [`EventListing.js`](frontend/components/views/publicPages/EventListing/EventListing.js)
+  (the file still `export default`s `EventListing`; the card is **not** duplicated) — it needs only
+  `_PUBLIC_COLUMNS` fields, so no backend change. **[`EventDetail.js`](frontend/components/views/publicPages/EventDetail/EventDetail.js)**
+  takes `related = []` (defensive default) and renders a `<section className="mt-5">` — an
+  `article-title h4` "More events" heading + a `row` of grid `EventCard`s — **before** the `<hr>`/edit
+  footer, hidden entirely when `related` is empty. **Verified by me:** `next build` **clean**; walked at
+  **both viewports** via a throwaway fixture page (the real `/[slug]` route needs the backend — same
+  boundary as SP-1; fixture deleted after) — desktop shows 3 cards at 356px each (3-across) with correct
+  titles/dates (incl. the "N dates" multi-date hint)/places/"View event" CTA and `/a/events/<slug>`
+  links; mobile (360px) stacks the 3 cards full-width with no horizontal overflow; the section sits
+  before the edit footer; console clean; no theme drift (same `event-card` classes as the listing).
+  **Decisions:** heading is `article-title h4` (Buenard, reusing the existing title class — theme-neutral
+  sizing only); over-fetch `limit: 7` then slice to 6 so removing the current event still leaves a full
+  row; row placed full-width **below** the two-column body (not inside `col-lg-8`) so the related cards
+  span the page like Eventbrite's. **Next: SP-3** (Read-more truncation). Not yet committed (awaiting
+  owner review).
