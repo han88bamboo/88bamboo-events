@@ -50,10 +50,18 @@ export function verifyProxySignature(query, secret) {
  * Guard for getServerSideProps. Returns { valid: true } when verification is
  * disabled or the signature checks out; otherwise { valid: false }.
  *
+ * On dynamic routes (e.g. pages/[slug].js), Next.js merges the route params
+ * into ctx.query alongside the real query string. Shopify's signature is
+ * only ever computed over the actual forwarded query string, so those
+ * route-param keys (not real query params) must be stripped before
+ * verifying, or every dynamic-route page fails signature verification.
+ *
  * @param {import('next').GetServerSidePropsContext} ctx
  */
 export function verifyProxyRequest(ctx) {
   if (!isTruthy(process.env.SHOPIFY_PROXY_VERIFY)) return { valid: true };
-  const ok = verifyProxySignature(ctx.query, process.env.SHOPIFY_SHARED_SECRET);
+  const proxyQuery = { ...ctx.query };
+  Object.keys(ctx.params || {}).forEach((key) => delete proxyQuery[key]);
+  const ok = verifyProxySignature(proxyQuery, process.env.SHOPIFY_SHARED_SECRET);
   return { valid: ok };
 }
