@@ -18,7 +18,7 @@
 // made partial entry vanish). They are combined into wire {start, end} datetimes
 // only at the form's submit boundary via toWireOccurrences(); the server then
 // derives the scalar summary (MIN start / MAX end) from them.
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 const BLANK_ROW = { date: '', start: '', end: '' };
 
@@ -61,6 +61,27 @@ const partsFromLocal = (start, end) => ({
 function ScheduleFields({ values, onChange, onValidationChange }) {
   const occurrences = Array.isArray(values.occurrences) ? values.occurrences : [];
   const multi = occurrences.length > 0;
+
+  // Single-date smart default: while the user has not taken ownership of "Ends",
+  // it auto-follows "Starts" (same 'YYYY-MM-DDTHH:MM' verbatim, zero duration) so
+  // the user only nudges the time instead of re-typing the whole date. This is a
+  // one-time default, NOT a permanent mirror: the moment the user edits Ends the
+  // ref flips and later Starts changes never clobber it. Edit surfaces mount with
+  // Ends already prefilled, so the flag starts "owned" and no auto-fill fires
+  // there. Only the single-date pair is affected; the multi-date table (below)
+  // keeps its own independent per-row parts.
+  const endOwnedRef = useRef(Boolean(values.end_datetime));
+
+  const handleStartChange = (value) => {
+    const patch = { start_datetime: value };
+    if (!endOwnedRef.current) patch.end_datetime = value;
+    onChange(patch);
+  };
+
+  const handleEndChange = (value) => {
+    endOwnedRef.current = true;
+    onChange({ end_datetime: value });
+  };
 
   // Report blocking validation up to the parent (mirrors LocationFields). 'HH:MM'
   // string compares are valid because both times share the row's single date.
@@ -144,7 +165,7 @@ function ScheduleFields({ values, onChange, onValidationChange }) {
               type="datetime-local"
               className="form-control"
               value={values.start_datetime || ''}
-              onChange={(e) => onChange({ start_datetime: e.target.value })}
+              onChange={(e) => handleStartChange(e.target.value)}
               required
             />
           </div>
@@ -157,7 +178,7 @@ function ScheduleFields({ values, onChange, onValidationChange }) {
               type="datetime-local"
               className="form-control"
               value={values.end_datetime || ''}
-              onChange={(e) => onChange({ end_datetime: e.target.value })}
+              onChange={(e) => handleEndChange(e.target.value)}
               required
             />
           </div>
