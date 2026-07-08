@@ -16,7 +16,6 @@ import {
   eventCanonicalUrl,
   eventMetaDescription,
 } from '@/core/utils/seo';
-import { dynamicRouteParam } from '@/core/utils/routeParams';
 import { verifyProxyRequest } from '@/core/utils/shopifyProxy';
 
 export async function getServerSideProps(ctx) {
@@ -24,7 +23,7 @@ export async function getServerSideProps(ctx) {
   const { valid } = verifyProxyRequest(ctx);
   if (!valid) return { notFound: true };
 
-  const requestedSlug = dynamicRouteParam(ctx, 'slug');
+  const requestedSlug = String(ctx.params.slug || '');
 
   let event = null;
   try {
