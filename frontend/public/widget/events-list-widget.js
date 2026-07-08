@@ -24,7 +24,7 @@
   var DEFAULT_SITE = 'https://88bamboo.co';
   var BASE_PATH = '/a/events';
   var DEFAULT_LIMIT = 24;
-  var DEFAULT_PAGE_SIZE = 3;
+  var DEFAULT_PAGE_SIZE = 5;
   var DEFAULT_INTERVAL_MS = 5000;
 
   function h(tag, attrs, children) {
@@ -193,7 +193,7 @@
       api: (mount.getAttribute('data-api') || DEFAULT_API).replace(/\/$/, ''),
       site: (mount.getAttribute('data-site') || DEFAULT_SITE).replace(/\/$/, ''),
       limit: numberAttr(mount, 'data-limit', DEFAULT_LIMIT, 1, 24),
-      pageSize: numberAttr(mount, 'data-page-size', DEFAULT_PAGE_SIZE, 1, 3),
+      pageSize: numberAttr(mount, 'data-page-size', DEFAULT_PAGE_SIZE, 1, 10),
       intervalMs: numberAttr(mount, 'data-interval-ms', DEFAULT_INTERVAL_MS, 1000, 60000),
       title: mount.getAttribute('data-title') || '',
     };

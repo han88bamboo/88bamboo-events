@@ -15,7 +15,7 @@
  *   <div id="bamboo-events-widget"
  *        data-api="https://events-api.88bamboo.co"
  *        data-site="https://88bamboo.co"
- *        data-limit="6"
+ *        data-limit="8"
  *        data-title="Upcoming events"></div>
  *   <script src="https://88bamboo.co/a/events/widget/events-widget.js" defer></script>
  *
