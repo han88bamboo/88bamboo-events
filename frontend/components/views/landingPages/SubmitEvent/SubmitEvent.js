@@ -15,7 +15,7 @@
 // (CheckoutStep, 3b) — the two-request contract is untouched. Validation is now
 // shown inline per field (D2, presentational only — the server stays authoritative)
 // and the image field has a thumbnail preview + drag-and-drop zone (D1).
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { submissionsService } from '@/core/services/submissions';
 import { accountService } from '@/core/services/account';
@@ -135,6 +135,96 @@ function initialFields(prefill, auth) {
   return base;
 }
 
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function descriptionToEditorHtml(text) {
+  const paragraphs = (text || '').split(/\n+/).filter(Boolean);
+  if (!paragraphs.length) return '<p><br></p>';
+  return paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`).join('');
+}
+
+function descriptionFromEditor(node) {
+  const lines = [];
+  let inlineText = '';
+
+  node.childNodes.forEach((child) => {
+    if (child.nodeType === Node.TEXT_NODE) {
+      inlineText += child.textContent || '';
+      return;
+    }
+
+    if (child.nodeType !== Node.ELEMENT_NODE) return;
+
+    if (child.tagName === 'BR') {
+      lines.push(inlineText);
+      inlineText = '';
+      return;
+    }
+
+    if (inlineText) {
+      lines.push(inlineText);
+      inlineText = '';
+    }
+    lines.push(child.textContent || '');
+  });
+
+  if (inlineText) lines.push(inlineText);
+
+  return lines
+    .join('\n')
+    .replace(/\u00a0/g, ' ')
+    .replace(/\r\n?/g, '\n')
+    .replace(/\n+$/g, '');
+}
+
+function PlainTextParagraphEditor({ id, labelledBy, value, onChange }) {
+  const editorRef = useRef(null);
+  const initialHtmlRef = useRef(descriptionToEditorHtml(value));
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    if (descriptionFromEditor(editor) !== value) {
+      editor.innerHTML = descriptionToEditorHtml(value);
+    }
+  }, [value]);
+
+  const emitChange = (editor) => onChange(descriptionFromEditor(editor));
+
+  const pastePlainText = (e) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData('text/plain');
+    document.execCommand('insertText', false, text);
+    window.setTimeout(() => emitChange(e.currentTarget), 0);
+  };
+
+  return (
+    <div
+      id={id}
+      ref={editorRef}
+      className={`form-control event-description-editor${
+        value ? '' : ' event-description-editor--empty'
+      }`}
+      role="textbox"
+      aria-labelledby={labelledBy}
+      aria-multiline="true"
+      contentEditable
+      data-placeholder="Tell attendees what to expect — drinks, hosts, what's included."
+      suppressContentEditableWarning
+      onInput={(e) => emitChange(e.currentTarget)}
+      onPaste={pastePlainText}
+      dangerouslySetInnerHTML={{ __html: initialHtmlRef.current }}
+    />
+  );
+}
+
 function SubmitEvent({ taxonomy, prefill, auth }) {
   // EP-7 login state (derived from SSR props — a login round-trip is a full
   // navigation that re-runs getServerSideProps, so nothing needs to persist here).
@@ -245,6 +335,9 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
 
   const setField = (key) => (e) =>
     setFields((prev) => ({ ...prev, [key]: e.target.value }));
+
+  const setDescription = (value) =>
+    setFields((prev) => ({ ...prev, description: value }));
 
   // Merge a partial update (used by LocationFields, which sets several fields at
   // once from one Google selection).
@@ -733,15 +826,19 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
           </div>
 
           <div className="mb-3">
-            <label className="form-label" htmlFor="description">
+            <label
+              id="description-label"
+              className="form-label"
+              htmlFor="description"
+              onClick={() => document.getElementById('description')?.focus()}
+            >
               Description
             </label>
-            <textarea
+            <PlainTextParagraphEditor
               id="description"
-              className="form-control"
-              rows={4}
+              labelledBy="description-label"
               value={fields.description}
-              onChange={setField('description')}
+              onChange={setDescription}
             />
             <div className="form-text d-flex justify-content-between">
               <span>Tell attendees what to expect — drinks, hosts, what&apos;s included.</span>

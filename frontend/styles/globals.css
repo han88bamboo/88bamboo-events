@@ -273,6 +273,31 @@ a:focus {
   border-color: var(--bamboo-green);
   box-shadow: 0 0 0 0.2rem rgba(0, 79, 45, 0.15);
 }
+.event-description-editor {
+  position: relative;
+  min-height: 10rem;
+  max-height: 24rem;
+  overflow: auto;
+  resize: vertical;
+  cursor: text;
+}
+.event-description-editor--empty::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  top: 0.375rem;
+  left: 0.75rem;
+  right: 0.75rem;
+  color: var(--bamboo-muted);
+  pointer-events: none;
+}
+.event-description-editor > p,
+.event-description-editor > div {
+  margin: 0 0 0.75rem;
+}
+.event-description-editor > p:last-child,
+.event-description-editor > div:last-child {
+  margin-bottom: 0;
+}
 @media (max-width: 749px) {
   /* 16px prevents iOS zoom-on-focus (reference §13). */
   .form-control,
