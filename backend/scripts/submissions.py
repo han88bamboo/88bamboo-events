@@ -35,8 +35,13 @@ from psycopg2.extras import Json
 from app import db_manager
 from event_versioning import insert_occurrences
 from geo_reference import load_geo
-from magic_links import create_magic_link
+from magic_links import create_magic_link, resolve_account_token
 from notifications import send_new_submission_admin, send_under_review
+from organiser_names import (
+    OrganiserNameConflict,
+    check_organiser_name_available,
+    claim_organiser_name,
+)
 from payments import (
     cancel_intent,
     create_manual_capture_intent,
@@ -71,6 +76,29 @@ _MAX_IMAGE_BYTES = int(os.getenv("MAX_IMAGE_MB", "5")) * 1024 * 1024
 _PUBLIC_EVENT_BASE_URL = os.getenv(
     "PUBLIC_EVENT_BASE_URL", "http://localhost:8080/a/events"
 ).rstrip("/")
+
+# Shown when a logged-in submitter picks an organiser name another account owns
+# (EP-7 first-come-first-served). Surfaced at the first submit (before any hold)
+# and again as a clean conflict if the rare persist-time race is hit.
+_ORGANISER_TAKEN = (
+    "That organiser name is already in use by another account. "
+    "Please choose a different one."
+)
+
+
+def _apply_account_identity(cursor, token, cleaned):
+    """EP-7: resolve an OPTIONAL account login and apply the auth rules to `cleaned`
+    IN PLACE. With a VALID token the authenticated email BECOMES submitter_email
+    (identity = the login, never a client-typed value — F-D2). With no/invalid token
+    the organiser name is dropped (it is only honoured for a logged-in submitter —
+    F-D5) and submitter_email stays as validated (an anonymous submit — unchanged).
+    Returns the authenticated email, or None when not logged in."""
+    acct = resolve_account_token(cursor, token) if token else None
+    if acct:
+        cleaned["submitter_email"] = acct["email"]
+        return acct["email"]
+    cleaned["organiser_name"] = None
+    return None
 
 
 def _load_active_taxonomy():
@@ -145,6 +173,9 @@ def submit_event():
         "event_format": request.form.get("event_format"),
         "submission_type": request.form.get("submission_type"),
         "drink_categories": request.form.getlist("drink_categories"),
+        # Public organiser name (EP-7) — only honoured for a logged-in submitter,
+        # gated on the account token below.
+        "organiser_name": request.form.get("organiser_name"),
     }
     cleaned, errors = validate_submission(data, allowed_categories, allowed_formats, geo)
 
@@ -161,6 +192,26 @@ def submit_event():
         )
         if not ok:
             errors.append(image_error)
+
+    # EP-7: resolve the OPTIONAL account login. When valid, submitter_email becomes
+    # the authenticated email (F-D2); otherwise the organiser name is dropped
+    # (F-D5). Then fail fast if the (logged-in) organiser name is already owned by
+    # another account, so a doomed name never reaches the pay screen — the
+    # authoritative transactional claim is in create-intent (F-D5). An anonymous
+    # submit (no token — the common case) does zero extra DB work: unchanged.
+    token = (request.form.get("token") or "").strip()
+    if token:
+        try:
+            with db_manager.get_cursor(commit=False) as cursor:
+                auth_email = _apply_account_identity(cursor, token, cleaned)
+                if cleaned.get("organiser_name") and not check_organiser_name_available(
+                    cursor, cleaned["organiser_name"], auth_email
+                ):
+                    errors.append(_ORGANISER_TAKEN)
+        except psycopg2.Error:
+            return jsonify({"code": 500, "error": "Database error occurred"}), 500
+    else:
+        cleaned["organiser_name"] = None  # never honoured without a valid login
 
     if errors:
         return jsonify({"code": 400, "error": "Validation failed", "errors": errors}), 400
@@ -228,6 +279,10 @@ def create_intent():
     image = payload.get("image") or {}
     payment_method_id = (payload.get("payment_method_id") or "").strip()
     idempotency_key = (payload.get("idempotency_key") or "").strip()
+    # EP-7: the account login token, re-posted with the held payload. Re-resolved
+    # server-side below — the client's submitter_email / organiser_name are never
+    # trusted.
+    token = (payload.get("token") or "").strip()
 
     # 1) Re-validate the held payload SERVER-SIDE — never trust what the client
     #    re-posts (plan §6). Same validators as 3a, against the live taxonomy.
@@ -244,6 +299,27 @@ def create_intent():
         errors.append("Missing payment details.")
     if errors:
         return jsonify({"code": 400, "error": "Validation failed", "errors": errors}), 400
+
+    # EP-7: re-resolve the login SERVER-SIDE (never trust the re-posted
+    # submitter_email / organiser_name), forcing submitter_email to the
+    # authenticated email (F-D2), and re-check the organiser name BEFORE we hold
+    # the card — a taken name must not cost the submitter an authorisation. The
+    # transactional claim (with the UNIQUE constraint as the final race guard) is
+    # inside the persist block below. Anonymous re-posts (no token) skip all of it.
+    auth_email = None
+    if token:
+        try:
+            with db_manager.get_cursor(commit=False) as cursor:
+                auth_email = _apply_account_identity(cursor, token, cleaned)
+                organiser_taken = bool(cleaned.get("organiser_name")) and not (
+                    check_organiser_name_available(cursor, cleaned["organiser_name"], auth_email)
+                )
+        except psycopg2.Error:
+            return jsonify({"code": 500, "error": "Database error occurred"}), 500
+        if organiser_taken:
+            return jsonify({"code": 409, "error": _ORGANISER_TAKEN}), 409
+    else:
+        cleaned["organiser_name"] = None  # never honoured without a valid login
 
     # 2) Fee from the active pricing tier (plan §6 — not a constant).
     amount, currency = _active_pricing_tier()
@@ -323,9 +399,9 @@ def create_intent():
                 "  end_datetime, venue_name, venue_address, country, city, region,"
                 "  latitude, longitude, place_id, postcode,"
                 "  description, link, contact_email, image_url, submission_type,"
-                "  drink_categories, event_format"
+                "  drink_categories, event_format, organiser_name"
                 ") VALUES (%s, 1, 'pending_review', %s, %s, %s, %s, %s, %s, %s, %s,"
-                "          %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                "          %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
                 (
                     event_id,
                     cleaned["name"],
@@ -347,9 +423,17 @@ def create_intent():
                     cleaned["submission_type"],
                     cleaned["drink_categories"],
                     cleaned["event_format"],
+                    # None unless the submitter is logged in (dropped otherwise, F-D5).
+                    cleaned.get("organiser_name"),
                 ),
             )
             version_id = cursor.fetchone()["id"]
+
+            # EP-7: claim the organiser name in the SAME transaction (re-checked
+            # here; the UNIQUE constraint is the final race guard — F-D5). Only when
+            # logged in + a name is set; a different owner raises OrganiserNameConflict.
+            if cleaned.get("organiser_name") and auth_email:
+                claim_organiser_name(cursor, cleaned["organiser_name"], auth_email)
 
             # Snapshot the per-date schedule for this version (EP-6), in the SAME
             # transaction. A single-date submission normalises to one row; the
@@ -411,6 +495,12 @@ def create_intent():
             # Fall back to ADMIN_NOTIFY_EMAIL when no admin_users row is seeded
             # (the local seed is env-driven and optional — database/README.md).
             admin_email = admin_row["email"] if admin_row else os.getenv("ADMIN_NOTIFY_EMAIL")
+    except OrganiserNameConflict:
+        # A rare race: the organiser name was claimed by another account between the
+        # pre-hold check and this commit (the UNIQUE constraint / SELECT caught it).
+        # Release the hold (no charge) and return a clean conflict (F-D5).
+        cancel_intent(intent.id)
+        return jsonify({"code": 409, "error": _ORGANISER_TAKEN}), 409
     except Exception:
         # authorise-succeeds-but-DB-save-fails (plan §6): release the hold so the
         # submitter is never left with an orphan authorisation, then surface a

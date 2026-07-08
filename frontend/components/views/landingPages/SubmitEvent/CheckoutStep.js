@@ -32,7 +32,7 @@ function newIdempotencyKey() {
   return `k_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
-function PayForm({ held, onPaid }) {
+function PayForm({ held, token, onPaid }) {
   const stripe = useStripe();
   const elements = useElements();
   const [error, setError] = useState(null);
@@ -65,6 +65,9 @@ function PayForm({ held, onPaid }) {
         image: held.image,
         payment_method_id: paymentMethod.id,
         idempotency_key: idempotencyKey,
+        // EP-7: re-posted so the server re-resolves the login (forces the
+        // submitter email + gates/claims the organiser name in the persist txn).
+        token: token || undefined,
       });
 
       if (ok) {
@@ -109,7 +112,7 @@ function PayForm({ held, onPaid }) {
   );
 }
 
-function CheckoutStep({ held, onPaid, onBack }) {
+function CheckoutStep({ held, token, onPaid, onBack }) {
   if (!stripePromise) {
     return (
       <div className="alert alert-warning" role="alert">
@@ -127,7 +130,7 @@ function CheckoutStep({ held, onPaid, onBack }) {
         the listing fee if your event is approved.
       </p>
       <Elements stripe={stripePromise}>
-        <PayForm held={held} onPaid={onPaid} />
+        <PayForm held={held} token={token} onPaid={onPaid} />
       </Elements>
       {onBack && (
         <button

@@ -53,6 +53,9 @@ function buildContext(item, isLive) {
       event_format: item.event_format || '',
       drink_categories: item.drink_categories || [],
       image_url: item.image_url || null,
+      // Public organiser name (EP-7); the admin edit re-claims it against the
+      // event's own submitter email if it changes.
+      organiser_name: item.organiser_name || '',
     },
   };
 }

@@ -114,6 +114,15 @@ function EventDetail({ event }) {
           </>
         )}
 
+        {/* Public organiser name (EP-7). Only for events that set one; legacy
+            events omit the row entirely (no backfill, F-D6). */}
+        {event.organiser_name && (
+          <>
+            <dt className="col-sm-3">Organised by</dt>
+            <dd className="col-sm-9">{event.organiser_name}</dd>
+          </>
+        )}
+
         {event.contact_email && (
           <>
             <dt className="col-sm-3">Contact</dt>

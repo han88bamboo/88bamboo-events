@@ -37,6 +37,7 @@ from notifications import (
     send_edit_submission_admin,
     send_magic_link,
 )
+from organiser_names import OrganiserNameConflict, fetch_organiser_names
 from rate_limit import RateLimiter, rate_limited
 from submission_validation import validate_submission
 
@@ -139,6 +140,10 @@ def context():
             version = editable_version(cursor, link["event_id"], link["published_version_id"])
             # Per-date schedule for the form to prefill the multi-date table (EP-6).
             occurrences = fetch_occurrences(cursor, version["id"]) if version else []
+            # The owner's previously-used organiser names for the datalist (EP-7);
+            # ownership is proven by the edit link, so the owner is this event's
+            # submitter email.
+            organiser_names = fetch_organiser_names(cursor, link["submitter_email"])
     except psycopg2.Error:
         return jsonify({"code": 500, "error": "Database error occurred"}), 500
 
@@ -153,6 +158,9 @@ def context():
                 "data": {
                     "slug": link["slug"],
                     "is_published": is_published,
+                    # The owner's past organiser names (EP-7) — the edit form's
+                    # datalist. Empty until they've claimed one.
+                    "organiser_names": organiser_names,
                     "event": {
                         "name": version["name"],
                         "submitter_email": link["submitter_email"],
@@ -183,6 +191,9 @@ def context():
                         "submission_type": version["submission_type"],
                         "drink_categories": version["drink_categories"] or [],
                         "image_url": version["image_url"],
+                        # Public organiser name for this version (EP-7); None for a
+                        # legacy version.
+                        "organiser_name": version["organiser_name"],
                     },
                 },
             }
@@ -241,6 +252,8 @@ def submit_edit():
             )
             admin_row = cursor.fetchone()
             admin_email = admin_row["email"] if admin_row else os.getenv("ADMIN_NOTIFY_EMAIL")
+    except OrganiserNameConflict as exc:
+        return jsonify({"code": 409, "error": str(exc)}), 409
     except psycopg2.Error:
         return jsonify({"code": 500, "error": "Could not save your edit. Please try again."}), 500
 

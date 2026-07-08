@@ -99,6 +99,18 @@ function PendingCard({ item, onApprove, onReject, onEdit, onMessage, busy }) {
               <dt className="col-sm-3">Submitter</dt>
               <dd className="col-sm-9">{item.submitter_email}</dd>
 
+              {/* Public organiser name (EP-7); its owner is the submitter email
+                  above, so the reviewer can see who is behind it. */}
+              {item.organiser_name && (
+                <>
+                  <dt className="col-sm-3">Organiser</dt>
+                  <dd className="col-sm-9">
+                    {item.organiser_name}{' '}
+                    <span className="text-muted">(owner: {item.submitter_email})</span>
+                  </dd>
+                </>
+              )}
+
               {item.contact_email && (
                 <>
                   <dt className="col-sm-3">Contact</dt>

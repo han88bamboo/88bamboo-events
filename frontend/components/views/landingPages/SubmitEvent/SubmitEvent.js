@@ -18,6 +18,7 @@
 import { useEffect, useState } from 'react';
 
 import { submissionsService } from '@/core/services/submissions';
+import { accountService } from '@/core/services/account';
 import { SUBMITTER_TYPES, withLegacyValue } from '@/core/constants/formOptions';
 import LocationFields from '@/components/common/LocationFields';
 import ScheduleFields, {
@@ -66,6 +67,9 @@ const EMPTY = {
   link: '',
   event_format: '',
   submission_type: '',
+  // Public organiser name (EP-7). Only submitted/shown when logged in; kept in the
+  // form state so a logged-in submitter can type it or pick a past name.
+  organiser_name: '',
 };
 
 // datetime-local wants 'YYYY-MM-DDTHH:MM'; the re-submit prefill carries ISO.
@@ -98,34 +102,46 @@ function buildFieldErrors(fields, selectedCategories, imageFile) {
   return fe;
 }
 
-// Build the initial form state, seeding from a re-submit prefill when present.
-function initialFields(prefill) {
-  if (!prefill) return EMPTY;
-  return {
-    ...EMPTY,
-    name: prefill.name || '',
-    submitter_email: prefill.submitter_email || '',
-    contact_email: prefill.contact_email || '',
-    start_datetime: toLocalInput(prefill.start_datetime),
-    end_datetime: toLocalInput(prefill.end_datetime),
-    occurrences: toEditableOccurrences(prefill.occurrences),
-    venue_name: prefill.venue_name || '',
-    venue_address: prefill.venue_address || '',
-    country: prefill.country || '',
-    city: prefill.city || '',
-    region: prefill.region || '',
-    latitude: prefill.latitude ?? '',
-    longitude: prefill.longitude ?? '',
-    place_id: prefill.place_id || '',
-    postcode: prefill.postcode || '',
-    description: prefill.description || '',
-    link: prefill.link || '',
-    event_format: prefill.event_format || '',
-    submission_type: prefill.submission_type || '',
-  };
+// Build the initial form state, seeding from a re-submit prefill when present and,
+// when logged in (EP-7), forcing submitter_email to the authenticated address.
+function initialFields(prefill, auth) {
+  const base = !prefill
+    ? { ...EMPTY }
+    : {
+        ...EMPTY,
+        name: prefill.name || '',
+        submitter_email: prefill.submitter_email || '',
+        contact_email: prefill.contact_email || '',
+        start_datetime: toLocalInput(prefill.start_datetime),
+        end_datetime: toLocalInput(prefill.end_datetime),
+        occurrences: toEditableOccurrences(prefill.occurrences),
+        venue_name: prefill.venue_name || '',
+        venue_address: prefill.venue_address || '',
+        country: prefill.country || '',
+        city: prefill.city || '',
+        region: prefill.region || '',
+        latitude: prefill.latitude ?? '',
+        longitude: prefill.longitude ?? '',
+        place_id: prefill.place_id || '',
+        postcode: prefill.postcode || '',
+        description: prefill.description || '',
+        link: prefill.link || '',
+        event_format: prefill.event_format || '',
+        submission_type: prefill.submission_type || '',
+        organiser_name: prefill.organiser_name || '',
+      };
+  // The logged-in email IS submitter_email (F-D2) — it is rendered read-only below.
+  if (auth?.email) base.submitter_email = auth.email;
+  return base;
 }
 
-function SubmitEvent({ taxonomy, prefill }) {
+function SubmitEvent({ taxonomy, prefill, auth }) {
+  // EP-7 login state (derived from SSR props — a login round-trip is a full
+  // navigation that re-runs getServerSideProps, so nothing needs to persist here).
+  const authToken = auth?.token || null;
+  const authEmail = auth?.email || null;
+  const pastNames = auth?.organiser_names || [];
+  const loggedIn = Boolean(authEmail);
   // Taxonomy normally arrives from SSR props. Keep it in state with a client-side
   // fallback: if SSR came back empty (a transient API blip), re-fetch it in the
   // browser so the form self-heals instead of showing empty selects (plan §7).
@@ -151,9 +167,17 @@ function SubmitEvent({ taxonomy, prefill }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const [fields, setFields] = useState(() => initialFields(prefill));
+  const [fields, setFields] = useState(() => initialFields(prefill, auth));
   const [selectedCategories, setSelectedCategories] = useState(prefill?.drink_categories || []);
   const [imageFile, setImageFile] = useState(null);
+
+  // EP-7 login panel (anonymous state only): request a magic link that returns to
+  // /submit?token=… signed in. Log-in-first, no in-progress persistence (owner
+  // decision) — the panel warns the form isn't kept when you leave to log in.
+  const [showLogin, setShowLogin] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [loginSent, setLoginSent] = useState(false);
   const [locationErrors, setLocationErrors] = useState([]); // from LocationFields
   const [scheduleErrors, setScheduleErrors] = useState([]); // from ScheduleFields (EP-6)
   const [honeypot, setHoneypot] = useState(''); // must stay empty for real users
@@ -192,7 +216,8 @@ function SubmitEvent({ taxonomy, prefill }) {
   const resetAll = () => {
     setResult(null);
     setConfirmation(null);
-    setFields(EMPTY);
+    // Keep the logged-in identity across "Submit another" (F-D2).
+    setFields(initialFields(null, auth));
     setSelectedCategories([]);
     setImageFile(null);
     setStep(0);
@@ -200,6 +225,22 @@ function SubmitEvent({ taxonomy, prefill }) {
     setLocationTouched(false);
     setScheduleTouched(false);
     setErrors([]);
+  };
+
+  // EP-7: request a submit-page login link. Always report "check your email"
+  // (generic, matching the backend's anti-enumeration response).
+  const onRequestLogin = async () => {
+    const email = loginEmail.trim();
+    if (!email) return;
+    setLoginBusy(true);
+    try {
+      await accountService.requestLoginLink(email);
+    } catch {
+      // ignore — the response is intentionally generic
+    } finally {
+      setLoginBusy(false);
+      setLoginSent(true);
+    }
   };
 
   const setField = (key) => (e) =>
@@ -289,6 +330,10 @@ function SubmitEvent({ taxonomy, prefill }) {
     });
     selectedCategories.forEach((c) => formData.append('drink_categories', c));
     formData.append('company_url', honeypot); // honeypot — server checks it
+    // EP-7: the account login token (present only when logged in). The server
+    // re-resolves it, forces submitter_email to the authenticated email, and gates
+    // the organiser name on it (F-D2/F-D5). Absent → an anonymous submit, unchanged.
+    if (authToken) formData.append('token', authToken);
     // Multi-date schedule (EP-6): combine each row's parts into wire {start,end}
     // datetimes. Empty in the single-date case → the server uses the scalar
     // start/end path (unchanged legacy behaviour).
@@ -368,6 +413,7 @@ function SubmitEvent({ taxonomy, prefill }) {
         </p>
         <CheckoutStep
           held={result}
+          token={authToken}
           onPaid={(data) => setConfirmation(data)}
           onBack={() => setResult(null)}
         />
@@ -441,6 +487,69 @@ function SubmitEvent({ taxonomy, prefill }) {
         {/* STEP 1 — Details. All steps stay mounted (hidden when inactive) so the
             LocationFields autocomplete + captured coords are never torn down. */}
         <div hidden={step !== 0}>
+          {/* EP-7 optional login. Anonymous submits are unchanged (F-D1); logging
+              in only unlocks the organiser-name field + locks the submitter email
+              to the authenticated address (F-D2). */}
+          {loggedIn ? (
+            <div className="border rounded p-3 mb-4 bg-light small">
+              Signed in as <strong>{authEmail}</strong>. Your submission is tied to
+              this email, and you can set a public organiser name below.
+            </div>
+          ) : (
+            <div className="border rounded p-3 mb-4 bg-light">
+              {loginSent ? (
+                <p className="small mb-0">
+                  Check your email for a login link. Open it to return here signed
+                  in, then set your organiser name. You can also keep submitting
+                  without logging in — an organiser name is optional.
+                </p>
+              ) : !showLogin ? (
+                <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                  <span className="text-muted small mb-0">
+                    Want to show a public organiser name on your listing? Log in first.
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-sm"
+                    onClick={() => setShowLogin(true)}
+                  >
+                    Log in
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <label className="form-label small mb-1" htmlFor="login_email">
+                    Email to log in with
+                  </label>
+                  <div className="d-flex gap-2 flex-wrap">
+                    <input
+                      id="login_email"
+                      type="email"
+                      className="form-control"
+                      style={{ maxWidth: 320 }}
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      placeholder="you@example.com"
+                    />
+                    <button
+                      type="button"
+                      className="btn bamboo-btn"
+                      onClick={onRequestLogin}
+                      disabled={loginBusy || !loginEmail.trim()}
+                    >
+                      {loginBusy ? 'Sending…' : 'Email me a link'}
+                    </button>
+                  </div>
+                  <div className="form-text">
+                    Optional — logging in lets you set a public organiser name. Log
+                    in before filling out the form: your entries aren&apos;t saved
+                    when you leave to open the email link.
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="mb-3">
             <label className="form-label" htmlFor="name">
               Event name <span className="text-danger">*</span>
@@ -469,9 +578,14 @@ function SubmitEvent({ taxonomy, prefill }) {
                 value={fields.submitter_email}
                 onChange={setField('submitter_email')}
                 onBlur={blur('submitter_email')}
+                readOnly={loggedIn}
                 required
               />
-              <div className="form-text">Where we send review updates.</div>
+              <div className="form-text">
+                {loggedIn
+                  ? 'Locked to your signed-in email.'
+                  : 'Where we send review updates.'}
+              </div>
               <FieldError name="submitter_email" />
             </div>
             <div className="col-md-6 mb-3">
@@ -488,6 +602,36 @@ function SubmitEvent({ taxonomy, prefill }) {
               <div className="form-text">Shown on the listing (optional).</div>
             </div>
           </div>
+
+          {/* Public organiser name (EP-7) — only when logged in (F-D1). Optional; a
+              datalist offers the submitter's previously-used names (F-D3). */}
+          {loggedIn && (
+            <div className="mb-3">
+              <label className="form-label" htmlFor="organiser_name">
+                Public organiser name
+              </label>
+              <input
+                id="organiser_name"
+                className="form-control"
+                list="organiser-name-options"
+                value={fields.organiser_name}
+                onChange={setField('organiser_name')}
+                maxLength={255}
+                placeholder="e.g. Sake Matsuri Singapore"
+              />
+              {pastNames.length > 0 && (
+                <datalist id="organiser-name-options">
+                  {pastNames.map((n) => (
+                    <option key={n} value={n} />
+                  ))}
+                </datalist>
+              )}
+              <div className="form-text">
+                Shown publicly as “Organised by …”. Optional. Once you use a name
+                it&apos;s yours to reuse; another account can&apos;t take it.
+              </div>
+            </div>
+          )}
 
           {/* Schedule: a single date by default, or an "Add another date" table for
               multi-date events (EP-6). ScheduleFields owns the date inputs and

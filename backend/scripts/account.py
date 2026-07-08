@@ -31,7 +31,9 @@ from notifications import (
     send_edit_received,
     send_edit_submission_admin,
     send_reply_admin,
+    send_submit_login_link,
 )
+from organiser_names import OrganiserNameConflict, fetch_organiser_names
 from payments import cancel_intent
 from rate_limit import RateLimiter, rate_limited
 from submission_validation import validate_submission
@@ -132,6 +134,65 @@ def request_link():
 
 
 # ---------------------------------------------------------------------------
+# EP-7 login link — a magic link that returns to the SUBMIT page (/submit?token=…)
+# so a submitter can log in there to set a public organiser name. Reuses the SAME
+# account-token machinery as the dashboard link (create_account_link /
+# resolve_account_token) — NOT a second auth system (F-D1); the only differences
+# are the return URL and that this is a login/sign-up, so — unlike the dashboard
+# link — it is sent to ANY valid-looking address that asks (a first-time organiser
+# has no listings yet). Rate-limited + always a generic 200, so it is neither an
+# email bomb nor an enumeration oracle.
+# ---------------------------------------------------------------------------
+@blueprint.route("/request-login-link", methods=["POST"])
+@rate_limited(_link_limiter)
+def request_login_link():
+    payload = request.get_json(silent=True) or {}
+    email = (payload.get("email") or "").strip().lower()
+
+    generic = (
+        jsonify({"code": 200, "data": "If that address is valid, a login link is on its way."}),
+        200,
+    )
+    if not email or "@" not in email:
+        return generic
+
+    try:
+        with db_manager.get_cursor() as cursor:
+            raw_token, _ = create_account_link(cursor, email)
+    except psycopg2.Error:
+        return generic
+
+    submit_url = f"{_PUBLIC_EVENT_BASE_URL}/submit?token={raw_token}"
+    send_submit_login_link(email, submit_url)
+    return generic
+
+
+# ---------------------------------------------------------------------------
+# EP-7 — resolve an account token → the authenticated email + that email's past
+# organiser names. The submit page calls this after a login round-trip
+# (/submit?token=…) to prefill the read-only submitter email (F-D2) and populate
+# the organiser-name datalist (F-D3). Read-only; same token machinery as the
+# dashboard.
+# ---------------------------------------------------------------------------
+@blueprint.route("/organisers", methods=["GET"])
+def organisers():
+    token = (request.args.get("token") or "").strip()
+    try:
+        with db_manager.get_cursor(commit=False) as cursor:
+            acct = resolve_account_token(cursor, token)
+            if not acct:
+                return jsonify({"code": 401, "error": "This link is invalid or has expired."}), 401
+            names = fetch_organiser_names(cursor, acct["email"])
+    except psycopg2.Error:
+        return jsonify({"code": 500, "error": "Database error occurred"}), 500
+
+    return (
+        jsonify({"code": 200, "data": {"email": acct["email"], "organiser_names": names}}),
+        200,
+    )
+
+
+# ---------------------------------------------------------------------------
 # The dashboard feed — every event this email submitted (full history), with the
 # display version (the live one if published, else the latest) + status flags for
 # badging. Ordered newest-submitted first.
@@ -220,6 +281,10 @@ def event():
             version = editable_version(cursor, ev["id"], ev["published_version_id"])
             # Per-date schedule for the edit form's multi-date table (EP-6).
             occurrences = fetch_occurrences(cursor, version["id"]) if version else []
+            # The owner's previously-used organiser names for the datalist (EP-7);
+            # ownership is proven by the account token, so the owner is this event's
+            # submitter email.
+            organiser_names = fetch_organiser_names(cursor, ev["submitter_email"])
     except psycopg2.Error:
         return jsonify({"code": 500, "error": "Database error occurred"}), 500
 
@@ -247,6 +312,9 @@ def event():
                     ),
                     "is_published": is_published,
                     "is_past": is_past,
+                    # The owner's past organiser names (EP-7) — the edit form's
+                    # datalist. Empty until they've claimed one.
+                    "organiser_names": organiser_names,
                     "event": {
                         "name": version["name"],
                         "submitter_email": ev["submitter_email"],
@@ -277,6 +345,9 @@ def event():
                         "submission_type": version["submission_type"],
                         "drink_categories": version["drink_categories"] or [],
                         "image_url": version["image_url"],
+                        # Public organiser name for this version (EP-7); None for a
+                        # legacy version.
+                        "organiser_name": version["organiser_name"],
                     },
                 },
             }
@@ -337,6 +408,8 @@ def edit():
             admin_email = admin_row["email"] if admin_row else os.getenv("ADMIN_NOTIFY_EMAIL")
             _log(cursor, ev["id"], "customer_edit",
                  {"version_id": new_version_id, "was_published": is_published})
+    except OrganiserNameConflict as exc:
+        return jsonify({"code": 409, "error": str(exc)}), 409
     except psycopg2.Error:
         return jsonify({"code": 500, "error": "Could not save your edit. Please try again."}), 500
 

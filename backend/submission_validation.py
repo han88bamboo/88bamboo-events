@@ -20,6 +20,7 @@ MAX_URL_LEN = 2048           # event link — TEXT column, capped to a sane URL 
 MAX_REGION_LEN = 255         # region — VARCHAR(255) in schema.sql
 MAX_POSTCODE_LEN = 32        # postcode — VARCHAR(32) in schema.sql
 MAX_PLACE_ID_LEN = 255       # Google place_id (TEXT column; capped defensively)
+MAX_ORGANISER_NAME_LEN = 255 # public organiser name — VARCHAR(255) in schema.sql (EP-7)
 
 # Coordinate ranges (EP-2 D-2): the server re-range-checks the lat/lng captured
 # from the Google Places selection, never trusting the client blindly.
@@ -319,6 +320,13 @@ def validate_submission(data, allowed_categories, allowed_formats, geo=None,
     if link and not _looks_like_url(link):
         errors.append("Event link must be a valid URL starting with http:// or https://.")
 
+    # Public organiser name (EP-7 F2). Optional, format-only here — just trimmed +
+    # length-capped. The DB uniqueness CLAIM and the "only honoured for a logged-in
+    # submitter" gate are the persist layer's job (organiser_names.py), exactly as
+    # the geo list is loaded outside this DB-free validator. A caller that omits the
+    # field gets cleaned["organiser_name"] = None, so every existing path is a no-op.
+    organiser_name = _text("organiser_name", MAX_ORGANISER_NAME_LEN)
+
     # Multi-select drink categories: at least one, all from the taxonomy.
     raw_categories = data.get("drink_categories") or []
     categories = [c.strip() for c in raw_categories if c and c.strip()]
@@ -355,5 +363,9 @@ def validate_submission(data, allowed_categories, allowed_formats, geo=None,
         "event_format": event_format,
         "drink_categories": categories,
         "submission_type": _text("submission_type", MAX_SHORT_LEN) or None,
+        # Format-cleaned only; the persist layer gates it on a valid login + claims
+        # its cross-account uniqueness (EP-7). None when absent — a no-op for callers
+        # that never send it.
+        "organiser_name": organiser_name or None,
     }
     return cleaned, errors

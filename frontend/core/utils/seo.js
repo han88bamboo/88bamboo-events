@@ -91,6 +91,12 @@ function buildOneEvent(event, start, end) {
   if (event?.description) jsonLd.description = event.description;
   const location = eventLocation(event);
   if (location) jsonLd.location = location;
+  // Public organiser (EP-7). Emitted only when the event set an organiser name;
+  // legacy events omit it. Organization is the safe default for a listing's
+  // organiser (an individual would be Person, but names here are org-style).
+  if (event?.organiser_name) {
+    jsonLd.organizer = { '@type': 'Organization', name: event.organiser_name };
+  }
   return jsonLd;
 }
 

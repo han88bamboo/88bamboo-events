@@ -67,6 +67,31 @@ class TestValidateSubmission(unittest.TestCase):
         # Empty optional contact email becomes None.
         self.assertIsNone(cleaned["contact_email"])
 
+    def test_organiser_name_absent_is_none_noop(self):
+        # EP-7: a caller that never sends organiser_name (every pre-EP-7 path) gets
+        # None and no new errors — a pure no-op for the existing flows.
+        cleaned, errors = validate_submission(_valid_form(), CATEGORIES, FORMATS)
+        self.assertEqual(errors, [])
+        self.assertIsNone(cleaned["organiser_name"])
+
+    def test_organiser_name_is_trimmed_and_passed_through(self):
+        # EP-7: format-only here (the DB claim is the persist layer's job) — trimmed
+        # and returned verbatim (casing preserved for display).
+        cleaned, errors = validate_submission(
+            _valid_form(organiser_name="  Sake Matsuri Singapore  "), CATEGORIES, FORMATS
+        )
+        self.assertEqual(errors, [])
+        self.assertEqual(cleaned["organiser_name"], "Sake Matsuri Singapore")
+
+    def test_organiser_name_is_length_capped(self):
+        # EP-7: over-long names are truncated to the column width, flagged as an error
+        # (mirrors the other _text length caps).
+        cleaned, errors = validate_submission(
+            _valid_form(organiser_name="x" * 300), CATEGORIES, FORMATS
+        )
+        self.assertTrue(any("too long" in e.lower() for e in errors))
+        self.assertEqual(len(cleaned["organiser_name"]), 255)
+
     def test_missing_required_fields(self):
         _, errors = validate_submission(
             _valid_form(name="", country="", city=""), CATEGORIES, FORMATS

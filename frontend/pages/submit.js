@@ -49,7 +49,28 @@ export async function getServerSideProps(ctx) {
     }
   }
 
-  return { props: { taxonomy, prefill } };
+  // EP-7 login: an OPTIONAL account token (from the emailed /submit?token=… link)
+  // authenticates the submitter so they can set a public organiser name. Resolve
+  // it SSR to { email, organiser_names } so the form renders the logged-in state
+  // from the first paint. Anonymous submits (no token) are unaffected (F-D1).
+  let auth = null;
+  if (token) {
+    try {
+      const res = await accountService.getOrganisers(String(token));
+      const payload = res.data?.data;
+      if (payload?.email) {
+        auth = {
+          token: String(token),
+          email: payload.email,
+          organiser_names: payload.organiser_names || [],
+        };
+      }
+    } catch {
+      auth = null;
+    }
+  }
+
+  return { props: { taxonomy, prefill, auth } };
 }
 
 function SubmitPage(props) {

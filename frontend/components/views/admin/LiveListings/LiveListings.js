@@ -120,6 +120,14 @@ function ListingRow({ item, token, onUnpublish, onEdit, onMessage, busy }) {
             <p className="small text-muted mb-1">
               {item.city}, {item.country} · {item.event_format}
             </p>
+            {/* Public organiser name (EP-7) + its owner email, so a reviewer sees
+                who is behind it. Hidden for listings without one. */}
+            {item.organiser_name && (
+              <p className="small text-muted mb-1">
+                Organised by {item.organiser_name}{' '}
+                <span className="text-muted">(owner: {item.submitter_email})</span>
+              </p>
+            )}
             <p className="small text-muted mb-2">
               /{item.slug} · {formatFee(item.amount, item.currency)}{' '}
               <span className="text-muted">({item.payment_status || '—'})</span>

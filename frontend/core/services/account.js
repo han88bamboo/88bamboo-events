@@ -10,6 +10,18 @@ export const accountService = {
     return apiClient.post('/account/request-link', { email });
   },
 
+  // EP-7: email a magic link that returns to the submit page (/submit?token=…) so
+  // the submitter can log in there to set a public organiser name. Always generic.
+  async requestLoginLink(email) {
+    return apiClient.post('/account/request-login-link', { email });
+  },
+
+  // EP-7: resolve a login token → { email, organiser_names } for the submit page's
+  // read-only submitter email + the "my previous organiser names" datalist.
+  async getOrganisers(token) {
+    return apiClient.get('/account/organisers', { params: { token } });
+  },
+
   // All of the email's events (full history) for the grid.
   async getContext(token) {
     return apiClient.get('/account/context', { params: { token } });

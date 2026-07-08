@@ -37,6 +37,7 @@ from notifications import (
     send_rejected,
     send_repay_required,
 )
+from organiser_names import OrganiserNameConflict
 from payments import cancel_intent, capture_intent
 from slugs import generate_unique_slug
 from submission_validation import validate_submission
@@ -132,6 +133,9 @@ def pending():
                     ev.submission_type,
                     ev.drink_categories,
                     ev.event_format,
+                    -- Public organiser name (EP-7) so the reviewer sees it; its
+                    -- owner is the event's submitter_email (also selected below).
+                    ev.organiser_name,
                     -- Per-date schedule (EP-6) so the reviewer sees every date and
                     -- the admin edit modal prefills the multi-date table. '[]' for a
                     -- legacy version (implied single occurrence from the scalars).
@@ -636,6 +640,8 @@ def edit():
                     "notified": bool(was_published and notify and notify_message),
                 },
             )
+    except OrganiserNameConflict as exc:
+        return jsonify({"code": 409, "error": str(exc)}), 409
     except psycopg2.Error:
         return jsonify({"code": 500, "error": "Could not save the edit. Please retry."}), 500
 
@@ -724,6 +730,9 @@ def live():
                     pv.link,
                     pv.contact_email,
                     pv.submission_type,
+                    -- Public organiser name (EP-7) — shown to the reviewer + prefills
+                    -- the admin edit modal; owner is e.submitter_email above.
+                    pv.organiser_name,
                     -- Per-date schedule (EP-6) for the date-count display + the
                     -- admin edit modal's multi-date table prefill.
                     COALESCE((

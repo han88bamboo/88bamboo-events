@@ -263,6 +263,26 @@ def send_account_link(recipient, dashboard_url):
     return send_email(subject, recipient, body)
 
 
+def send_submit_login_link(recipient, submit_url):
+    """EP-7 submit-page login magic-link email. Returns the recipient to the "List
+    an event" page already logged in (/submit?token=…) so they can set a public
+    organiser name. Same cookie-free URL-token shape + 24-hour expiry as the
+    account link; only the destination differs (F-D1)."""
+    subject = "Your login link to list an event on 88 Bamboo"
+    body = (
+        f"Hi,\n\n"
+        f"You (or someone using your email) asked to log in while listing an event "
+        f"on 88 Bamboo. Use the link below to continue — you'll be signed in so you "
+        f"can set a public organiser name for your listing. It expires in 24 hours "
+        f"and is for you alone:\n\n"
+        f"{submit_url}\n\n"
+        f"If you didn't request this, you can safely ignore this email — nothing "
+        f"changes.\n"
+        f"— 88 Bamboo Events"
+    )
+    return send_email(subject, recipient, body)
+
+
 def send_edit_received(recipient, event):
     """Submitter confirmation that an edit was received and is under review (plan
     §7/§8). Edits are free at MVP, so — unlike a first submission — there is no new

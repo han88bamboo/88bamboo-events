@@ -19,6 +19,8 @@
 # Image is carried forward from the version being edited (image editing is out of
 # MVP scope).
 
+from organiser_names import claim_organiser_name, normalise_organiser_name
+
 
 def insert_occurrences(cursor, version_id, occurrences):
     """Snapshot a version's per-date schedule (EP-6). `occurrences` is the cleaned
@@ -122,9 +124,9 @@ def create_edit_version(cursor, event_id, published_version_id, cleaned,
         "  end_datetime, venue_name, venue_address, country, city, region,"
         "  latitude, longitude, place_id, postcode,"
         "  description, link, contact_email, image_url, submission_type,"
-        "  drink_categories, event_format"
+        "  drink_categories, event_format, organiser_name"
         ") VALUES (%s, %s, 'pending_review', %s, %s, %s, %s, %s, %s, %s,"
-        "          %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+        "          %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
         (
             event_id,
             next_version_number,
@@ -147,9 +149,29 @@ def create_edit_version(cursor, event_id, published_version_id, cleaned,
             cleaned["submission_type"],
             cleaned["drink_categories"],
             cleaned["event_format"],
+            # Organiser name (EP-7) round-trips through the edit form like
+            # drink_categories, so re-inserting it IS the carry-forward. None when
+            # the submitter cleared it.
+            cleaned.get("organiser_name"),
         ),
     )
     new_version_id = cursor.fetchone()["id"]
+
+    # EP-7: re-run the organiser-name claim ONLY when it CHANGED. The owner is the
+    # event's own submitter email — an edit session already proves ownership (its
+    # magic link / account token / admin auth), so no re-auth is needed here. An
+    # unchanged name is already claimed; a changed name is claimed against the owner
+    # (a name owned by a DIFFERENT account raises OrganiserNameConflict → the
+    # caller's transaction rolls back and it returns a conflict).
+    new_organiser = cleaned.get("organiser_name")
+    if new_organiser:
+        prev_organiser = source.get("organiser_name") if source else None
+        if normalise_organiser_name(new_organiser) != normalise_organiser_name(prev_organiser):
+            cursor.execute("SELECT submitter_email FROM events WHERE id = %s", (event_id,))
+            owner_row = cursor.fetchone()
+            claim_organiser_name(
+                cursor, new_organiser, owner_row["submitter_email"] if owner_row else None
+            )
 
     # Re-snapshot the per-date schedule onto the NEW version (EP-6). `cleaned`
     # always carries the current schedule (the edit forms round-trip it, so an

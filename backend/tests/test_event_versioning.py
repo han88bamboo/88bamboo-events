@@ -40,6 +40,7 @@ def _source(**over):
         "longitude": None,
         "place_id": None,
         "postcode": None,
+        "organiser_name": None,
     }
     row.update(over)
     return row
@@ -137,6 +138,40 @@ class PostApprovalEditTests(unittest.TestCase):
         # No supersede / hold-move in the post-approval branch.
         self.assertFalse(any("approval_status = 'rejected'" in sql for sql, _ in cur.executed))
         self.assertFalse(any("UPDATE payments" in sql for sql, _ in cur.executed))
+
+
+class OrganiserNameEditTests(unittest.TestCase):
+    """EP-7: the organiser-name claim re-runs on an edit only when the (normalised)
+    name CHANGED, keyed to the event's own submitter email (no re-auth on edit)."""
+
+    def test_claim_runs_when_the_name_changed(self):
+        # Queue: source row, version-number bump, INSERT id, then the
+        # SELECT submitter_email row and the claim's owner-lookup (None = unclaimed
+        # → the claim INSERTs).
+        cur = FakeCursor([
+            _source(organiser_name="Old Org"),
+            {"n": 2},
+            {"id": 70},
+            {"submitter_email": "owner@x.com"},
+            None,
+        ])
+        cleaned = dict(_CLEANED, organiser_name="Sake Matsuri Singapore")
+        create_edit_version(cur, event_id=3, published_version_id=5, cleaned=cleaned)
+        self.assertTrue(any("SELECT submitter_email" in sql for sql, _ in cur.executed))
+        self.assertTrue(
+            any("INSERT INTO event_organiser_names" in sql for sql, _ in cur.executed)
+        )
+
+    def test_claim_skipped_when_the_name_is_unchanged(self):
+        # A normalisation-equivalent name (case/space) counts as unchanged, so no
+        # ownership lookup or claim runs.
+        cur = FakeCursor([_source(organiser_name="Sake Matsuri Singapore"), {"n": 2}, {"id": 71}])
+        cleaned = dict(_CLEANED, organiser_name="sake  matsuri singapore ")
+        create_edit_version(cur, event_id=3, published_version_id=5, cleaned=cleaned)
+        self.assertFalse(any("SELECT submitter_email" in sql for sql, _ in cur.executed))
+        self.assertFalse(
+            any("event_organiser_names" in sql for sql, _ in cur.executed)
+        )
 
 
 if __name__ == "__main__":

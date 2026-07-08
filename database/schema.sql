@@ -160,6 +160,12 @@ CREATE TABLE event_versions (
     place_id         TEXT,
     postcode         VARCHAR(32),
     region           VARCHAR(255),
+    -- Public event-organiser name (EP-7 F2). Optional, nullable, no backfill:
+    -- legacy versions have NULL and render with no "Organised by" line. Snapshotted
+    -- per version like the other content; the display string keeps the submitter's
+    -- original casing. Ownership/uniqueness is enforced via event_organiser_names
+    -- (below), keyed to the authenticated submitter email — NOT stored here.
+    organiser_name   VARCHAR(255),
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     reviewed_at      TIMESTAMPTZ,                -- set when approved/rejected
     rejection_reason TEXT                        -- admin-editable reason (plan §6 reject)
@@ -243,6 +249,26 @@ CREATE TABLE event_occurrences (
     sort_order       INTEGER NOT NULL DEFAULT 0
 );
 
+-- event_organiser_names — the registry that makes a public organiser name
+-- (EP-7 F2/F-D3) race-proof first-come-first-served + cross-account-unique. The
+-- FIRST authenticated email to claim a normalised name OWNS it and may reuse it on
+-- any number of their own events; a DIFFERENT email is rejected. normalised_name is
+-- UNIQUE (case-insensitive + trimmed + punctuation/accent/whitespace-folded, per
+-- F-D4) so the DB constraint itself resolves a submit-time race — the claim is
+-- checked before the payment hold and re-checked + committed inside the persist
+-- transaction (F-D5). display_name preserves the submitter's original casing for
+-- display; owner_email is the AUTHENTICATED submitter email (the ownership key —
+-- NEVER the public contact email, F-D2). Additive/no-backfill: the table starts
+-- empty and legacy events never retroactively claim a name (F-D6). Standalone
+-- reference-style rows (not part of the versioned listing graph); no FK.
+CREATE TABLE event_organiser_names (
+    id              SERIAL PRIMARY KEY,
+    normalised_name VARCHAR(255) NOT NULL UNIQUE,
+    owner_email     VARCHAR(255) NOT NULL,
+    display_name    VARCHAR(255) NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- event_messages — the admin⇄submitter conversation thread for a listing
 -- (post-launch feature). One row per message; the "thread" is every row for an
 -- event, oldest-first. Web-link replies only: the submitter never emails us back,
@@ -276,6 +302,7 @@ CREATE INDEX idx_files_event_version_id      ON files (event_version_id);
 CREATE INDEX idx_event_messages_event_id     ON event_messages (event_id, created_at);  -- thread reads + unread scan
 CREATE INDEX idx_country_regions_country_id ON country_regions (country_id);   -- region dropdown lookups
 CREATE INDEX idx_event_occurrences_version   ON event_occurrences (event_version_id);  -- per-version schedule reads (EP-6)
+CREATE INDEX idx_event_organiser_names_owner  ON event_organiser_names (owner_email);   -- "my previous organiser names" dropdown (EP-7)
 
 -- ===========================================================================
 -- SEED DATA (non-secret). The admin user is seeded separately from env by

@@ -68,7 +68,11 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
     link: src.link || '',
     submission_type: src.submission_type || '',
     event_format: src.event_format || '',
+    // Public organiser name (EP-7). The edit session already proves ownership, so
+    // no login is needed here; a changed name is re-claimed server-side.
+    organiser_name: src.organiser_name || '',
   });
+  const pastOrganiserNames = context?.organiser_names || [];
   const [selectedCategories, setSelectedCategories] = useState(src.drink_categories || []);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState([]); // server/network errors (top alert)
@@ -214,6 +218,30 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
             <label className="form-label" htmlFor="contact_email">Public contact email</label>
             <input id="contact_email" type="email" className="form-control" value={fields.contact_email} onChange={setField('contact_email')} />
           </div>
+        </div>
+
+        {/* Public organiser name (EP-7) — optional; a datalist offers the owner's
+            previously-used names. Changing it re-claims server-side (a name owned by
+            another account is rejected). */}
+        <div className="mb-3">
+          <label className="form-label" htmlFor="organiser_name">Public organiser name</label>
+          <input
+            id="organiser_name"
+            className="form-control"
+            list="organiser-name-options"
+            value={fields.organiser_name}
+            onChange={setField('organiser_name')}
+            maxLength={255}
+            placeholder="e.g. Sake Matsuri Singapore"
+          />
+          {pastOrganiserNames.length > 0 && (
+            <datalist id="organiser-name-options">
+              {pastOrganiserNames.map((n) => (
+                <option key={n} value={n} />
+              ))}
+            </datalist>
+          )}
+          <div className="form-text">Shown publicly as “Organised by …”. Optional.</div>
         </div>
 
         {/* Schedule: single date by default or a multi-date table (EP-6). Owned by

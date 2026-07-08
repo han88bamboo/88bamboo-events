@@ -66,6 +66,9 @@ _PUBLIC_COLUMNS = """
     pv.image_url,
     pv.event_format,
     pv.drink_categories,
+    -- Public organiser name (EP-7) — inherited by the listing, detail, and widget
+    -- feeds. NULL for a legacy event → the detail page renders no "Organised by" line.
+    pv.organiser_name,
     -- Count of extra dates for the "N dates" listing/widget hint (EP-6 E-D3). A
     -- cheap summary scalar — the listing/widget feeds still carry the summary
     -- start/end only, never the per-date fan-out. 0 for a legacy version (implied
