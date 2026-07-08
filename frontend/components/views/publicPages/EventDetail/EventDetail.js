@@ -7,7 +7,18 @@
 // current_status='expired' (which is never public).
 import Link from 'next/link';
 
-import { formatDateRange, isPastEvent } from '../publicFormat';
+import { isPastEvent } from '../publicFormat';
+import EventSummaryCard from './EventSummaryCard';
+
+// Split a plain-text description into paragraphs (SP-1 / P1). Every newline (single
+// OR double) starts a new paragraph, so a submitter's single return renders as a
+// neatly-spaced <p> without needing a blank line. Empty fragments are dropped.
+function toParagraphs(text) {
+  return (text || '')
+    .split(/\n+/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
 
 function EventDetail({ event }) {
   if (!event) return null;
@@ -54,8 +65,16 @@ function EventDetail({ event }) {
       }`
     : null;
 
+  const paragraphs = toParagraphs(event.description);
+  // Shared props for the summary/CTA card, rendered twice: inline on mobile and in
+  // the sticky right column on desktop (SP-1, mirroring ManageEvent's MessagesPanel).
+  const summaryProps = { event, occurrences, multiDate, where };
+
   return (
-    <main className="article-measure py-5">
+    // Two-column body reusing the ManageEvent recipe: a widened Bootstrap container
+    // + row, content in col-lg-8, an at-a-glance summary/CTA in a sticky col-lg-4.
+    // On mobile the row collapses to one column and the summary renders inline.
+    <main className="container py-5" style={{ maxWidth: 1140 }}>
       <p className="mb-3">
         <Link href="/" className="text-decoration-none">&larr; All events</Link>
       </p>
@@ -66,114 +85,91 @@ function EventDetail({ event }) {
         </div>
       )}
 
-      {/* Article-like title: Buenard ~32px desktop / ~26px mobile (Decision 2). */}
-      <h1 className="article-title mb-3">{event.name}</h1>
-
-      <div className="d-flex flex-wrap gap-1 mb-3">
-        {event.event_format && <span className="badge-bamboo">{event.event_format}</span>}
-        {categories.map((c) => (
-          <span key={c} className="badge-bamboo badge-bamboo--muted">{c}</span>
-        ))}
-      </div>
-
-      {event.image_url && (
-        // Centered featured image, capped like the storefront article treatment
-        // (reference §12) rather than a full-bleed banner.
-        <img
-          src={event.image_url}
-          alt={event.name}
-          className="img-fluid rounded mb-4 d-block mx-auto"
-          style={{ maxWidth: 600, width: '100%', objectFit: 'cover' }}
-        />
-      )}
-
-      <dl className="row">
-        <dt className="col-sm-3">When</dt>
-        <dd className="col-sm-9">
-          {multiDate ? (
-            <>
-              <span className="d-block fw-semibold">{occurrences.length} dates</span>
-              <ul className="list-unstyled mb-1">
-                {occurrences.map((o, i) => (
-                  // Schedule rows are order-stable (server-sorted, no reorder).
-                  // eslint-disable-next-line react/no-array-index-key
-                  <li key={i}>{formatDateRange(o.start, o.end)}</li>
-                ))}
-              </ul>
-            </>
-          ) : (
-            formatDateRange(occurrences[0].start, occurrences[0].end)
-          )}
-          <span className="d-block text-muted small">Local time at the event location.</span>
-        </dd>
-
-        {where && (
-          <>
-            <dt className="col-sm-3">Where</dt>
-            <dd className="col-sm-9">{where}</dd>
-          </>
-        )}
-
-        {/* Public organiser name (EP-7). Only for events that set one; legacy
-            events omit the row entirely (no backfill, F-D6). */}
-        {event.organiser_name && (
-          <>
-            <dt className="col-sm-3">Organised by</dt>
-            <dd className="col-sm-9">{event.organiser_name}</dd>
-          </>
-        )}
-
-        {event.contact_email && (
-          <>
-            <dt className="col-sm-3">Contact</dt>
-            <dd className="col-sm-9">
-              <a href={`mailto:${event.contact_email}`}>{event.contact_email}</a>
-            </dd>
-          </>
-        )}
-      </dl>
-
-      {/* Location map (A1): a keyless Google embed placing the event by its address
-          string, plus a "Get directions" link. Only shown when we have an address
-          to place. EP-2 upgrades this to an exact pin from stored coordinates. */}
-      {mapSrc && (
-        <div className="mb-4">
-          <div className="ratio ratio-16x9 rounded overflow-hidden border">
-            <iframe
-              title={`Map showing ${event.venue_name || where}`}
-              src={mapSrc}
-              loading="lazy"
-              referrerPolicy="no-referrer-when-downgrade"
-              style={{ border: 0 }}
-              allowFullScreen
+      <div className="row g-4">
+        <div className="col-lg-8">
+          {event.image_url && (
+            // Featured image ABOVE the title (Eventbrite-faithful order, SPP-D2),
+            // kept capped rather than a full-bleed banner (banner = theme, excluded).
+            <img
+              src={event.image_url}
+              alt={event.name}
+              className="img-fluid rounded mb-4 d-block mx-auto"
+              style={{ maxWidth: 600, width: '100%', objectFit: 'cover' }}
             />
+          )}
+
+          {/* Article-like title: Buenard ~32px desktop / ~26px mobile (Decision 2). */}
+          <h1 className="article-title mb-3">{event.name}</h1>
+
+          <div className="d-flex flex-wrap gap-1 mb-3">
+            {event.event_format && <span className="badge-bamboo">{event.event_format}</span>}
+            {categories.map((c) => (
+              <span key={c} className="badge-bamboo badge-bamboo--muted">{c}</span>
+            ))}
           </div>
-          <p className="mt-2 mb-0">
-            <a href={directionsUrl} target="_blank" rel="noopener noreferrer">
-              Get directions ↗
-            </a>
-          </p>
-        </div>
-      )}
 
-      {event.description && (
-        <div className="bamboo-prose mb-4" style={{ whiteSpace: 'pre-wrap' }}>
-          {event.description}
-        </div>
-      )}
+          {/* Mobile-only summary: on <lg the sticky column is hidden, so the facts
+              stack here right under the title/badges. */}
+          <EventSummaryCard {...summaryProps} className="d-lg-none mb-4" />
 
-      {event.link && (
-        <p>
-          <a
-            href={event.link}
-            target="_blank"
-            rel="noopener noreferrer nofollow"
-            className="btn bamboo-btn bamboo-btn--secondary"
-          >
-            Visit event website
-          </a>
-        </p>
-      )}
+          {/* Location map (A1): a keyless Google embed placing the event by its
+              address string, plus a "Get directions" link. Only shown when we have
+              an address. EP-2 upgrades this to an exact pin from stored coords. */}
+          {mapSrc && (
+            <div className="mb-4">
+              <div className="ratio ratio-16x9 rounded overflow-hidden border">
+                <iframe
+                  title={`Map showing ${event.venue_name || where}`}
+                  src={mapSrc}
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  style={{ border: 0 }}
+                  allowFullScreen
+                />
+              </div>
+              <p className="mt-2 mb-0">
+                <a href={directionsUrl} target="_blank" rel="noopener noreferrer">
+                  Get directions ↗
+                </a>
+              </p>
+            </div>
+          )}
+
+          {paragraphs.length > 0 && (
+            // Each newline-separated fragment is its own <p> (P1) so a single return
+            // reads as a spaced paragraph — natural rhythm from the default <p>
+            // margin, no themed styling.
+            <div className="bamboo-prose mb-4">
+              {paragraphs.map((para, i) => (
+                // eslint-disable-next-line react/no-array-index-key
+                <p key={i}>{para}</p>
+              ))}
+            </div>
+          )}
+
+          {/* Bottom CTA preserved alongside the one in the summary card (SPP-D4). */}
+          {event.link && (
+            <p>
+              <a
+                href={event.link}
+                target="_blank"
+                rel="noopener noreferrer nofollow"
+                className="btn bamboo-btn bamboo-btn--secondary"
+              >
+                Visit event website
+              </a>
+            </p>
+          )}
+        </div>
+
+        {/* Desktop: sticky summary/CTA column (hidden on mobile — rendered inline
+            above instead). */}
+        <div className="col-lg-4 d-none d-lg-block">
+          <div className="position-sticky" style={{ top: '1rem' }}>
+            <EventSummaryCard {...summaryProps} />
+          </div>
+        </div>
+      </div>
 
       <hr className="my-4" />
       <p className="text-muted small">
