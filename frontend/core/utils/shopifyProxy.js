@@ -46,22 +46,58 @@ export function verifyProxySignature(query, secret) {
   }
 }
 
+function queryFromUrl(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return null;
+
+  const parsed = new URL(rawUrl, 'http://localhost');
+  const query = {};
+  parsed.searchParams.forEach((value, key) => {
+    if (query[key] === undefined) {
+      query[key] = value;
+    } else if (Array.isArray(query[key])) {
+      query[key].push(value);
+    } else {
+      query[key] = [query[key], value];
+    }
+  });
+  return query;
+}
+
+function queryHasSignature(query) {
+  return Boolean(query && query.signature);
+}
+
+function proxyQueryFromRequest(ctx) {
+  // Next's ctx.query includes synthetic dynamic params. The request URL query is
+  // the source of truth for what Shopify actually signed, including _next/data
+  // client transitions where the dynamic param is a real query key.
+  const fromResolvedUrl = queryFromUrl(ctx.resolvedUrl);
+  if (queryHasSignature(fromResolvedUrl)) return fromResolvedUrl;
+
+  const fromReqUrl = queryFromUrl(ctx.req?.url);
+  if (queryHasSignature(fromReqUrl)) return fromReqUrl;
+
+  // Defensive fallback for non-Next test contexts: preserve the earlier fix for
+  // full page loads where dynamic params exist in ctx.query but not the URL.
+  const proxyQuery = { ...ctx.query };
+  Object.keys(ctx.params || {}).forEach((key) => delete proxyQuery[key]);
+  return proxyQuery;
+}
+
 /**
  * Guard for getServerSideProps. Returns { valid: true } when verification is
  * disabled or the signature checks out; otherwise { valid: false }.
  *
- * On dynamic routes (e.g. pages/[slug].js), Next.js merges the route params
- * into ctx.query alongside the real query string. Shopify's signature is
- * only ever computed over the actual forwarded query string, so those
- * route-param keys (not real query params) must be stripped before
- * verifying, or every dynamic-route page fails signature verification.
+ * On dynamic routes (e.g. pages/[slug].js), Next.js merges route params into
+ * ctx.query even when they were not part of the real URL. On client-side
+ * _next/data transitions, those same params can be real query keys. Verify the
+ * actual request URL query so both shapes match what Shopify signed.
  *
  * @param {import('next').GetServerSidePropsContext} ctx
  */
 export function verifyProxyRequest(ctx) {
   if (!isTruthy(process.env.SHOPIFY_PROXY_VERIFY)) return { valid: true };
-  const proxyQuery = { ...ctx.query };
-  Object.keys(ctx.params || {}).forEach((key) => delete proxyQuery[key]);
+  const proxyQuery = proxyQueryFromRequest(ctx);
   const ok = verifyProxySignature(proxyQuery, process.env.SHOPIFY_SHARED_SECRET);
   return { valid: ok };
 }
