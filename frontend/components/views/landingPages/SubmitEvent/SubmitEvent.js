@@ -592,9 +592,8 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
             <div className="border rounded p-3 mb-4 bg-light">
               {loginSent ? (
                 <p className="small mb-0">
-                  Check your email for a login link. Open it to return here signed
-                  in, then set your organiser name. You can also keep submitting
-                  without logging in — an organiser name is optional.
+                  Check your email for a login link. Open the link to sign in and submit your event there.
+                  You can leave this page now. 
                 </p>
               ) : !showLogin ? (
                 <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
