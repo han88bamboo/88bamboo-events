@@ -95,16 +95,23 @@ function buildParams(f) {
   return p;
 }
 
+// Cut `text` to at most `maxLen` chars on a word boundary, with an ellipsis.
+// Shared by the card excerpt below and the detail page's "Read more" truncation
+// (EventDetail.js) so both trim text the same way.
+export function truncateAtWordBoundary(text, maxLen) {
+  if (text.length <= maxLen) return text;
+  const cut = text.slice(0, maxLen);
+  const lastSpace = cut.lastIndexOf(' ');
+  return `${(lastSpace > maxLen / 2 ? cut.slice(0, lastSpace) : cut).trim()}…`;
+}
+
 // Short editorial excerpt for a card: first ~120 chars of the description, on a
 // word boundary, with an ellipsis. Empty when there's no description (the card
 // falls back to the date/place lines).
 function excerptOf(event) {
   const d = (event.description || '').trim().replace(/\s+/g, ' ');
   if (!d) return '';
-  if (d.length <= 120) return d;
-  const cut = d.slice(0, 120);
-  const lastSpace = cut.lastIndexOf(' ');
-  return `${(lastSpace > 60 ? cut.slice(0, lastSpace) : cut).trim()}…`;
+  return truncateAtWordBoundary(d, 120);
 }
 
 // Exported so the detail page's "More events" row (SP-2) can reuse the exact same

@@ -245,13 +245,13 @@ exist and are reusable.
   links, no theme drift; fixture deleted.)*
 
 ### Phase SP-3 — "Read more" description truncation (T1)
-- [ ] **Collapse the description** ([`:159–163`](frontend/components/views/publicPages/EventDetail/EventDetail.js:159)):
+- [x] **Collapse the description** ([`:159–163`](frontend/components/views/publicPages/EventDetail/EventDetail.js:159)):
   render a truncated view with a "Read more"/"Show less" toggle (client `useState`), reusing/adapting
   the existing `excerptOf` idea ([`EventListing.js:101`](frontend/components/views/publicPages/EventListing/EventListing.js:101))
   — export it or lift a shared helper rather than re-implementing. Only truncate above a sensible
   length; short descriptions render in full with no toggle. → verify: long + short fixtures; toggle
-  works; SSR renders the truncated text (no hydration mismatch); both viewports.
-- [ ] `next build` clean; walked at both viewports. → tick + round-log entry.
+  works; SSR renders the truncated text (no hydration mismatch); both viewports. *(done — see round log.)*
+- [x] `next build` clean; walked at both viewports. → tick + round-log entry.
 
 ### Phase SP-4 — Regression / verification gate
 - [ ] **Both viewports, real data:** desktop shows content-left + summary-right (sticky); mobile shows
@@ -359,3 +359,29 @@ _Append one entry per working session: date, phase touched, what shipped, decisi
   row; row placed full-width **below** the two-column body (not inside `col-lg-8`) so the related cards
   span the page like Eventbrite's. **Next: SP-3** (Read-more truncation). Not yet committed (awaiting
   owner review).
+- **2026-07-08 — SP-3 shipped (Read more / T1).** **Delivered** the description collapse without
+  reimplementing truncation: extracted the word-boundary cut out of `excerptOf`
+  ([`EventListing.js:101`](frontend/components/views/publicPages/EventListing/EventListing.js:101))
+  into a small exported `truncateAtWordBoundary(text, maxLen)` helper (excerpt behaviour for cards is
+  unchanged — same 120-char budget, same call), then reused it from
+  [`EventDetail.js`](frontend/components/views/publicPages/EventDetail/EventDetail.js). **Truncation
+  operates on the paragraph array, not the raw string** (interacts with P1 per the checklist note): a
+  new `collapseParagraphs(paragraphs, maxLen)` walks the same `toParagraphs()` output, keeps whole
+  paragraphs while under a `DESCRIPTION_COLLAPSE_LENGTH = 400` char budget, and only trims the *last*
+  included paragraph via `truncateAtWordBoundary` — so paragraph boundaries are never cut mid-way
+  through an earlier paragraph. A `useState(false)` toggle (`expanded`) picks between the collapsed and
+  full paragraph arrays; **initial state is `false` on both server and first client render**, so there's
+  no hydration mismatch — the toggle is purely a post-hydration interaction. The "Read more"/"Show less"
+  button reuses an **existing** class combo already in the repo (`btn btn-link btn-sm p-0 small
+  text-decoration-none`, precedented at
+  [`EventListing.js:300`](frontend/components/views/publicPages/EventListing/EventListing.js:300)) — no
+  new CSS. Short descriptions (under the 400-char budget) render every paragraph in full with **no**
+  button at all (`isTruncated` false). **Verified by me:** `next build` **clean**; walked at **both
+  viewports** via a throwaway fixture pair (`_fixture-sp3.js` long/multi-paragraph,
+  `_fixture-sp3-short.js` single short paragraph — both deleted after; confirmed absent from the final
+  `next build` route list) — long fixture collapsed to 2 of 3 paragraphs with the last one word-boundary
+  truncated + "Read more" button; clicking it flipped to all 3 full paragraphs + "Show less" (verified via
+  DOM inspection, not just screenshot); short fixture rendered its one paragraph in full with no button;
+  console clean both times (no hydration warnings); reflow checked at 360px mobile — same collapsed
+  markup, no overflow. **No new deps, no backend/schema/data change, no themed CSS.** **Next: SP-4**
+  (both-viewports regression gate, real data, owner walkthrough).

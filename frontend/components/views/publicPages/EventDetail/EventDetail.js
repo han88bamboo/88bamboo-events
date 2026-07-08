@@ -6,9 +6,10 @@
 // event is over" (plan §8) — computed from end_datetime, NOT from the internal
 // current_status='expired' (which is never public).
 import Link from 'next/link';
+import { useState } from 'react';
 
 import { isPastEvent } from '../publicFormat';
-import { EventCard } from '../EventListing/EventListing';
+import { EventCard, truncateAtWordBoundary } from '../EventListing/EventListing';
 import EventSummaryCard from './EventSummaryCard';
 
 // Split a plain-text description into paragraphs (SP-1 / P1). Every newline (single
@@ -19,6 +20,33 @@ function toParagraphs(text) {
     .split(/\n+/)
     .map((p) => p.trim())
     .filter(Boolean);
+}
+
+// "Read more" collapse threshold (SP-3 / T1): only truncate once the description
+// clears this many characters, so short descriptions render in full with no toggle.
+const DESCRIPTION_COLLAPSE_LENGTH = 400;
+
+// Build the collapsed view of a paragraph array (the same model P1 renders from —
+// never the raw string) by keeping whole paragraphs until the budget is spent, then
+// trimming the last one on a word boundary via the shared card-excerpt helper.
+function collapseParagraphs(paragraphs, maxLen) {
+  const full = paragraphs.join(' ');
+  if (full.length <= maxLen) return { collapsed: paragraphs, isTruncated: false };
+
+  const collapsed = [];
+  let used = 0;
+  for (const para of paragraphs) {
+    const remaining = maxLen - used;
+    if (remaining <= 0) break;
+    if (para.length <= remaining) {
+      collapsed.push(para);
+      used += para.length;
+    } else {
+      collapsed.push(truncateAtWordBoundary(para, remaining));
+      break;
+    }
+  }
+  return { collapsed, isTruncated: true };
 }
 
 function EventDetail({ event, related = [] }) {
@@ -67,6 +95,14 @@ function EventDetail({ event, related = [] }) {
     : null;
 
   const paragraphs = toParagraphs(event.description);
+  const { collapsed: collapsedParagraphs, isTruncated } = collapseParagraphs(
+    paragraphs,
+    DESCRIPTION_COLLAPSE_LENGTH,
+  );
+  // Client-only toggle (SP-3 / T1). Starts collapsed on both server and client so
+  // the first client render matches the SSR markup exactly — no hydration mismatch.
+  const [expanded, setExpanded] = useState(false);
+  const visibleParagraphs = isTruncated && !expanded ? collapsedParagraphs : paragraphs;
   // Shared props for the summary/CTA card, rendered twice: inline on mobile and in
   // the sticky right column on desktop (SP-1, mirroring ManageEvent's MessagesPanel).
   const summaryProps = { event, occurrences, multiDate, where };
@@ -139,12 +175,23 @@ function EventDetail({ event, related = [] }) {
           {paragraphs.length > 0 && (
             // Each newline-separated fragment is its own <p> (P1) so a single return
             // reads as a spaced paragraph — natural rhythm from the default <p>
-            // margin, no themed styling.
+            // margin, no themed styling. Collapsed to DESCRIPTION_COLLAPSE_LENGTH by
+            // default (SP-3 / T1); short descriptions never truncate, so no toggle
+            // renders for them.
             <div className="bamboo-prose mb-4">
-              {paragraphs.map((para, i) => (
+              {visibleParagraphs.map((para, i) => (
                 // eslint-disable-next-line react/no-array-index-key
                 <p key={i}>{para}</p>
               ))}
+              {isTruncated && (
+                <button
+                  type="button"
+                  className="btn btn-link btn-sm p-0 small text-decoration-none"
+                  onClick={() => setExpanded((v) => !v)}
+                >
+                  {expanded ? 'Show less' : 'Read more'}
+                </button>
+              )}
             </div>
           )}
 
