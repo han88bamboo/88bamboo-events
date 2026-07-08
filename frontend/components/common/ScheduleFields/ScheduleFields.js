@@ -10,33 +10,67 @@
 //     (E-D5), so a single-date submit is byte-for-byte the legacy flow.
 //   • MULTI — occurrences is a non-empty array. A small table with one DATE + a
 //     start time + an end time per row; the date is shared by both times so an
-//     occurrence never spans past midnight (single-day only — E-D6). Emits
-//     values.occurrences as [{start, end}] in 'YYYY-MM-DDTHH:MM'. The server derives
-//     the scalar summary (MIN start / MAX end) from it — it is the single writer of
-//     both, so the summary the listing/is_past/auto-expire read never drifts.
+//     occurrence never spans past midnight (single-day only — E-D6).
+//
+// The occurrence rows are held as SEPARATE parts { date, start, end } — date as
+// 'YYYY-MM-DD', start/end as 'HH:MM' — so editing one field never clears another
+// (a combined datetime string can't represent a date typed before its time, which
+// made partial entry vanish). They are combined into wire {start, end} datetimes
+// only at the form's submit boundary via toWireOccurrences(); the server then
+// derives the scalar summary (MIN start / MAX end) from them.
 import { useEffect } from 'react';
 
-const BLANK_ROW = { start: '', end: '' };
+const BLANK_ROW = { date: '', start: '', end: '' };
 
-// datetime-local <-> date/time-part helpers. A row's single DATE is shared by its
-// start and end time (single-day occurrence, E-D6).
-const datePart = (dt) => (dt ? String(dt).slice(0, 10) : '');
-const timePart = (dt) => (String(dt || '').length >= 16 ? String(dt).slice(11, 16) : '');
-const join = (date, time) => (date && time ? `${date}T${time}` : '');
+// 'HH:MM' from an ISO / 'YYYY-MM-DDTHH:MM…' datetime (the segment after the 'T').
+const hhmm = (dt) => {
+  const s = String(dt || '');
+  return s.length >= 16 ? s.slice(11, 16) : '';
+};
+
+// A serialised occurrences list ([{start,end}] ISO from the backend) -> the
+// editable { date, start, end } part shape. Only a genuine multi-date schedule
+// (>1 date) opens the table; a single/legacy date uses the scalar start/end, so
+// this returns undefined for <= 1 (the parent then stays in single mode).
+export function toEditableOccurrences(list) {
+  if (!Array.isArray(list) || list.length <= 1) return undefined;
+  return list.map((o) => ({
+    date: String(o.start || o.end || '').slice(0, 10),
+    start: hhmm(o.start),
+    end: hhmm(o.end),
+  }));
+}
+
+// The editable { date, start, end } part shape -> wire {start, end} as
+// 'YYYY-MM-DDTHH:MM' (or '' for an incomplete row, which the server/inline rules
+// then reject). Called by the forms when assembling the submit payload.
+export function toWireOccurrences(list) {
+  return (list || []).map((o) => ({
+    start: o.date && o.start ? `${o.date}T${o.start}` : '',
+    end: o.date && o.end ? `${o.date}T${o.end}` : '',
+  }));
+}
+
+// Seed a first row from the single-date inputs when the table is first revealed.
+const partsFromLocal = (start, end) => ({
+  date: String(start || end || '').slice(0, 10),
+  start: hhmm(start),
+  end: hhmm(end),
+});
 
 function ScheduleFields({ values, onChange, onValidationChange }) {
   const occurrences = Array.isArray(values.occurrences) ? values.occurrences : [];
   const multi = occurrences.length > 0;
 
-  // Report blocking validation up to the parent (mirrors LocationFields). String
-  // compares are valid because both sides are equal-length 'YYYY-MM-DDTHH:MM'.
+  // Report blocking validation up to the parent (mirrors LocationFields). 'HH:MM'
+  // string compares are valid because both times share the row's single date.
   useEffect(() => {
     if (!onValidationChange) return;
     const errs = [];
     if (multi) {
       let valid = 0;
       occurrences.forEach((o, i) => {
-        if (!o.start || !o.end) {
+        if (!o.date || !o.start || !o.end) {
           errs.push(`Date ${i + 1}: enter a date with a start and end time.`);
         } else if (o.end <= o.start) {
           errs.push(`Date ${i + 1}: the end time must be after the start time.`);
@@ -68,7 +102,7 @@ function ScheduleFields({ values, onChange, onValidationChange }) {
       setOccurrences([...occurrences, { ...BLANK_ROW }]);
     } else {
       setOccurrences([
-        { start: values.start_datetime || '', end: values.end_datetime || '' },
+        partsFromLocal(values.start_datetime, values.end_datetime),
         { ...BLANK_ROW },
       ]);
     }
@@ -77,31 +111,18 @@ function ScheduleFields({ values, onChange, onValidationChange }) {
   // Collapse back to a single date, seeding the inputs from the first row.
   const useSingleDate = () => {
     const first = occurrences[0] || BLANK_ROW;
-    onChange({ occurrences: [], start_datetime: first.start, end_datetime: first.end });
+    onChange({
+      occurrences: [],
+      start_datetime: first.date && first.start ? `${first.date}T${first.start}` : '',
+      end_datetime: first.date && first.end ? `${first.date}T${first.end}` : '',
+    });
   };
 
   const removeRow = (i) => setOccurrences(occurrences.filter((_, idx) => idx !== i));
 
-  const setRowDate = (i, date) =>
-    setOccurrences(
-      occurrences.map((o, idx) =>
-        idx === i
-          ? { start: join(date, timePart(o.start)), end: join(date, timePart(o.end)) }
-          : o,
-      ),
-    );
-  const setRowStart = (i, time) =>
-    setOccurrences(
-      occurrences.map((o, idx) =>
-        idx === i ? { ...o, start: join(datePart(o.start) || datePart(o.end), time) } : o,
-      ),
-    );
-  const setRowEnd = (i, time) =>
-    setOccurrences(
-      occurrences.map((o, idx) =>
-        idx === i ? { ...o, end: join(datePart(o.end) || datePart(o.start), time) } : o,
-      ),
-    );
+  // Each part is stored independently, so editing one never clears the others.
+  const setRowField = (i, key, value) =>
+    setOccurrences(occurrences.map((o, idx) => (idx === i ? { ...o, [key]: value } : o)));
 
   const localTimeNote = (
     <p className="form-text mt-0 mb-3">
@@ -174,8 +195,8 @@ function ScheduleFields({ values, onChange, onValidationChange }) {
               id={`occ-date-${i}`}
               type="date"
               className="form-control"
-              value={datePart(o.start) || datePart(o.end)}
-              onChange={(e) => setRowDate(i, e.target.value)}
+              value={o.date || ''}
+              onChange={(e) => setRowField(i, 'date', e.target.value)}
             />
           </div>
           <div className="col-5 col-sm-3">
@@ -186,8 +207,8 @@ function ScheduleFields({ values, onChange, onValidationChange }) {
               id={`occ-start-${i}`}
               type="time"
               className="form-control"
-              value={timePart(o.start)}
-              onChange={(e) => setRowStart(i, e.target.value)}
+              value={o.start || ''}
+              onChange={(e) => setRowField(i, 'start', e.target.value)}
             />
           </div>
           <div className="col-5 col-sm-3">
@@ -198,8 +219,8 @@ function ScheduleFields({ values, onChange, onValidationChange }) {
               id={`occ-end-${i}`}
               type="time"
               className="form-control"
-              value={timePart(o.end)}
-              onChange={(e) => setRowEnd(i, e.target.value)}
+              value={o.end || ''}
+              onChange={(e) => setRowField(i, 'end', e.target.value)}
             />
           </div>
           <div className="col-2 col-sm-1">

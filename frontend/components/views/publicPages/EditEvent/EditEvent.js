@@ -17,18 +17,13 @@ import { useState } from 'react';
 
 import { SUBMITTER_TYPES, withLegacyValue } from '@/core/constants/formOptions';
 import LocationFields from '@/components/common/LocationFields';
-import ScheduleFields from '@/components/common/ScheduleFields';
+import ScheduleFields, {
+  toEditableOccurrences,
+  toWireOccurrences,
+} from '@/components/common/ScheduleFields';
 
 // datetime-local wants 'YYYY-MM-DDTHH:MM'; the API returns full ISO strings.
 const toLocalInput = (iso) => (iso ? String(iso).slice(0, 16) : '');
-
-// Map a serialised occurrences list to the datetime-local shape ScheduleFields
-// edits. Only a genuine multi-date schedule (>1) opens the table; a single/legacy
-// date uses the scalar start/end (EP-6).
-function toLocalOccurrences(list) {
-  if (!Array.isArray(list) || list.length <= 1) return undefined;
-  return list.map((o) => ({ start: toLocalInput(o.start), end: toLocalInput(o.end) }));
-}
 
 // Pure: build the per-field error map (D2, presentational only — the shared
 // validate_submission on the server stays the authority). Mirrors SubmitEvent
@@ -57,7 +52,7 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
     contact_email: src.contact_email || '',
     start_datetime: toLocalInput(src.start_datetime),
     end_datetime: toLocalInput(src.end_datetime),
-    occurrences: toLocalOccurrences(src.occurrences),
+    occurrences: toEditableOccurrences(src.occurrences),
     venue_name: src.venue_name || '',
     venue_address: src.venue_address || '',
     country: src.country || '',
@@ -128,9 +123,16 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
     }
     setSubmitting(true);
     try {
+      // Combine the multi-date rows' parts into wire {start,end} datetimes (EP-6);
+      // in single-date mode occurrences is absent → the server uses the scalar
+      // start/end path.
+      const { occurrences, ...rest } = fields;
       const { data, ok } = await onSubmit({
-        ...fields,
+        ...rest,
         drink_categories: selectedCategories,
+        ...(Array.isArray(occurrences)
+          ? { occurrences: toWireOccurrences(occurrences) }
+          : {}),
       });
       if (!ok) {
         setErrors(data?.errors || [data?.error || 'Could not save your edit.']);

@@ -20,7 +20,10 @@ import { useEffect, useState } from 'react';
 import { submissionsService } from '@/core/services/submissions';
 import { SUBMITTER_TYPES, withLegacyValue } from '@/core/constants/formOptions';
 import LocationFields from '@/components/common/LocationFields';
-import ScheduleFields from '@/components/common/ScheduleFields';
+import ScheduleFields, {
+  toEditableOccurrences,
+  toWireOccurrences,
+} from '@/components/common/ScheduleFields';
 import CheckoutStep from './CheckoutStep';
 
 // Mirror the server's image rules for fast client-side feedback (the server is
@@ -95,14 +98,6 @@ function buildFieldErrors(fields, selectedCategories, imageFile) {
   return fe;
 }
 
-// Map a serialised occurrences list ([{start,end}] ISO) to the datetime-local
-// 'YYYY-MM-DDTHH:MM' shape ScheduleFields edits. Only a genuine multi-date schedule
-// (>1 date) opens the table; a single/legacy date uses the scalar start/end.
-function toLocalOccurrences(list) {
-  if (!Array.isArray(list) || list.length <= 1) return undefined;
-  return list.map((o) => ({ start: toLocalInput(o.start), end: toLocalInput(o.end) }));
-}
-
 // Build the initial form state, seeding from a re-submit prefill when present.
 function initialFields(prefill) {
   if (!prefill) return EMPTY;
@@ -113,7 +108,7 @@ function initialFields(prefill) {
     contact_email: prefill.contact_email || '',
     start_datetime: toLocalInput(prefill.start_datetime),
     end_datetime: toLocalInput(prefill.end_datetime),
-    occurrences: toLocalOccurrences(prefill.occurrences),
+    occurrences: toEditableOccurrences(prefill.occurrences),
     venue_name: prefill.venue_name || '',
     venue_address: prefill.venue_address || '',
     country: prefill.country || '',
@@ -294,9 +289,10 @@ function SubmitEvent({ taxonomy, prefill }) {
     });
     selectedCategories.forEach((c) => formData.append('drink_categories', c));
     formData.append('company_url', honeypot); // honeypot — server checks it
-    // Multi-date schedule (EP-6). Empty in the single-date case → the server uses
-    // the scalar start/end path (unchanged legacy behaviour).
-    formData.append('occurrences', JSON.stringify(fields.occurrences || []));
+    // Multi-date schedule (EP-6): combine each row's parts into wire {start,end}
+    // datetimes. Empty in the single-date case → the server uses the scalar
+    // start/end path (unchanged legacy behaviour).
+    formData.append('occurrences', JSON.stringify(toWireOccurrences(fields.occurrences)));
     if (imageFile) formData.append('image', imageFile);
 
     setSubmitting(true);
@@ -385,7 +381,7 @@ function SubmitEvent({ taxonomy, prefill }) {
         List an event
       </h1>
       <p className="text-muted">
-        Submit your drinks or hospitality event. Listings go live after review;
+        Submit your event. Listings go live after review;
         the USD 5 fee is only charged if your listing is approved.
       </p>
 

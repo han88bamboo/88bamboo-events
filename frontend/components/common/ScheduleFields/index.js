@@ -1,1 +1,1 @@
-export { default } from './ScheduleFields';
+export { default, toEditableOccurrences, toWireOccurrences } from './ScheduleFields';
