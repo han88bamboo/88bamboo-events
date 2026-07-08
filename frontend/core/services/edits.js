@@ -16,8 +16,11 @@ export const editsService = {
     return apiClient.get('/edits/context', { params: { token } });
   },
 
-  // Submit edited fields -> a new pending_review version.
-  async submitEdit(token, event) {
-    return apiClient.post('/edits/submit', { token, event });
+  // Submit edited fields -> a new pending_review version. `additionalImages` is
+  // the post-go-live "additional images" feature's current full list (round-trip
+  // pattern, like drink_categories/occurrences) — defaults to [] for callers that
+  // predate the feature.
+  async submitEdit(token, event, additionalImages = []) {
+    return apiClient.post('/edits/submit', { token, event, additional_images: additionalImages });
   },
 };

@@ -39,7 +39,8 @@ export async function getServerSideProps(ctx) {
 
 export default function EditPage({ token, context, taxonomy }) {
   // The form is transport-agnostic; wire it to the per-event edit endpoint.
-  const onSubmit = (eventFields) => editsService.submitEdit(token, eventFields);
+  const onSubmit = (eventFields, additionalImages) =>
+    editsService.submitEdit(token, eventFields, additionalImages);
   return (
     <>
       <Head>

@@ -53,6 +53,9 @@ function buildContext(item, isLive) {
       event_format: item.event_format || '',
       drink_categories: item.drink_categories || [],
       image_url: item.image_url || null,
+      // Additional images (post-go-live feature) — the admin edit's
+      // add/remove/reorder list, prefilled from /admin/pending or /admin/live.
+      additional_images: item.additional_images || [],
       // Public organiser name (EP-7); the admin edit re-claims it against the
       // event's own submitter email if it changes.
       organiser_name: item.organiser_name || '',
@@ -76,8 +79,8 @@ function AdminEditModal({ token, item, isLive, onClose, onSaved }) {
     };
   }, []);
 
-  const onSubmit = (fields) =>
-    adminService.edit(token, item.version_id, fields, isLive && notify, note);
+  const onSubmit = (fields, additionalImages) =>
+    adminService.edit(token, item.version_id, fields, isLive && notify, note, additionalImages);
 
   const extras = isLive ? (
     <div className="border rounded p-3 mb-3 bg-light">

@@ -32,9 +32,13 @@ export const accountService = {
     return apiClient.get('/account/event', { params: { token, event_id: eventId } });
   },
 
-  // Edit an owned event -> a new pending version.
-  async editEvent(token, eventId, event) {
-    return apiClient.post('/account/edit', { token, event_id: eventId, event });
+  // Edit an owned event -> a new pending version. `additionalImages` is the
+  // post-go-live "additional images" feature's current full list (round-trip
+  // pattern, like drink_categories/occurrences).
+  async editEvent(token, eventId, event, additionalImages = []) {
+    return apiClient.post('/account/edit', {
+      token, event_id: eventId, event, additional_images: additionalImages,
+    });
   },
 
   async withdraw(token, eventId) {

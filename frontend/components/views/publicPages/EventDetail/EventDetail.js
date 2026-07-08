@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { isPastEvent } from '../publicFormat';
 import { EventCard } from '../EventListing/EventListing';
 import EventSummaryCard from './EventSummaryCard';
+import ImageCarousel from './ImageCarousel';
 
 // Split a plain-text description into paragraphs (SP-1 / P1). Every newline (single
 // OR double) starts a new paragraph, so a submitter's single return renders as a
@@ -74,6 +75,14 @@ function EventDetail({ event, related = [] }) {
       }`
     : null;
 
+  // Post-go-live "additional images" feature: feature image first (unchanged
+  // hero, still event.image_url), then the additional images in upload order.
+  // A legacy/no-extra-images event yields exactly the pre-feature single image.
+  const carouselImages = [
+    ...(event.image_url ? [{ url: event.image_url }] : []),
+    ...(event.additional_images || []),
+  ];
+
   const paragraphs = toParagraphs(event.description);
   // Collapse only an exceptionally long description (SPP-D9): the description+map
   // block clips behind a faded, clickable "See more" region; short ones show in
@@ -108,16 +117,11 @@ function EventDetail({ event, related = [] }) {
               Now ABOVE the image (owner revision, SPP-D7 — reverses SPP-D2). */}
           <h1 className="article-title mb-3">{event.name}</h1>
 
-          {event.image_url && (
-            // Hero image, kept capped rather than a full-bleed banner (banner =
-            // theme, excluded). Sits BELOW the title now (SPP-D7).
-            <img
-              src={event.image_url}
-              alt={event.name}
-              className="img-fluid rounded mb-4 d-block mx-auto"
-              style={{ maxWidth: 600, width: '100%', objectFit: 'cover' }}
-            />
-          )}
+          {/* Hero image, kept capped rather than a full-bleed banner (banner =
+              theme, excluded). Sits BELOW the title now (SPP-D7). A left/right
+              carousel (post-go-live feature) when there are additional images;
+              otherwise this is exactly the original single-image markup. */}
+          <ImageCarousel images={carouselImages} alt={event.name} />
 
           <div className="d-flex flex-wrap gap-1 mb-3">
             {event.event_format && <span className="badge-bamboo">{event.event_format}</span>}

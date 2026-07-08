@@ -23,7 +23,12 @@ from flask import Blueprint, jsonify, request
 from psycopg2.extras import Json
 
 from app import db_manager
-from event_versioning import create_edit_version, editable_version, fetch_occurrences
+from event_versioning import (
+    create_edit_version,
+    editable_version,
+    fetch_additional_images,
+    fetch_occurrences,
+)
 from geo_reference import load_geo
 from magic_links import create_account_link, resolve_account_token
 from notifications import (
@@ -36,7 +41,7 @@ from notifications import (
 from organiser_names import OrganiserNameConflict, fetch_organiser_names
 from payments import cancel_intent
 from rate_limit import RateLimiter, rate_limited
-from submission_validation import validate_submission
+from submission_validation import validate_additional_images, validate_submission
 
 file_name = os.path.basename(__file__)
 blueprint = Blueprint(file_name[:-3], __name__)  # blueprint name == filename
@@ -281,6 +286,9 @@ def event():
             version = editable_version(cursor, ev["id"], ev["published_version_id"])
             # Per-date schedule for the edit form's multi-date table (EP-6).
             occurrences = fetch_occurrences(cursor, version["id"]) if version else []
+            # Additional images (post-go-live feature) for the edit form's
+            # add/remove/reorder list. [] for a legacy version.
+            additional_images = fetch_additional_images(cursor, version["id"]) if version else []
             # The owner's previously-used organiser names for the datalist (EP-7);
             # ownership is proven by the account token, so the owner is this event's
             # submitter email.
@@ -345,6 +353,9 @@ def event():
                         "submission_type": version["submission_type"],
                         "drink_categories": version["drink_categories"] or [],
                         "image_url": version["image_url"],
+                        # Additional images (post-go-live feature) — resent whole
+                        # on submit (round-trip pattern, like occurrences).
+                        "additional_images": additional_images,
                         # Public organiser name for this version (EP-7); None for a
                         # legacy version.
                         "organiser_name": version["organiser_name"],
@@ -366,6 +377,9 @@ def edit():
     token = (payload.get("token") or "").strip()
     event_id = payload.get("event_id")
     event_fields = payload.get("event") or {}
+    # Post-go-live "additional images" feature: the form always resends the
+    # current full list (round-trip pattern, like drink_categories/occurrences).
+    additional_images = payload.get("additional_images") or []
 
     try:
         allowed_categories, allowed_formats = _load_active_taxonomy()
@@ -379,6 +393,8 @@ def edit():
         event_fields, allowed_categories, allowed_formats, geo,
         require_address_selection=False,
     )
+    cleaned_additional_images, additional_image_errors = validate_additional_images(additional_images)
+    errors.extend(additional_image_errors)
     if errors:
         return jsonify({"code": 400, "error": "Validation failed", "errors": errors}), 400
 
@@ -398,7 +414,8 @@ def edit():
                 )
 
             new_version_id, is_published = create_edit_version(
-                cursor, ev["id"], ev["published_version_id"], cleaned
+                cursor, ev["id"], ev["published_version_id"], cleaned,
+                additional_images=cleaned_additional_images,
             )
 
             cursor.execute(

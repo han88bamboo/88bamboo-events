@@ -222,7 +222,9 @@ function ManageEvent({ token, eventId, data, taxonomy }) {
       <EditEvent
         context={{ event: ev, is_published: data.is_published }}
         taxonomy={taxonomy}
-        onSubmit={(fields) => accountService.editEvent(token, eventId, fields)}
+        onSubmit={(fields, additionalImages) =>
+          accountService.editEvent(token, eventId, fields, additionalImages)
+        }
         onCancel={() => setMode('view')}
       />
     );

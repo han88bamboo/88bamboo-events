@@ -58,6 +58,41 @@ def fetch_occurrences(cursor, version_id):
     ]
 
 
+def insert_additional_images(cursor, version_id, images):
+    """Snapshot a version's ADDITIONAL images (post-go-live feature, plan.md
+    backlog) — the required feature image is NOT included here; it stays
+    event_versions.image_url, written by its own unchanged code path. `images` is
+    the cleaned list of {"s3_key","url","content_type","size_bytes"} from
+    submission_validation.validate_additional_images, in carousel order. Written
+    to the SAME `files` table the feature image uses, at sort_order 1..N (the
+    feature image's own `files` row keeps the default sort_order 0 and is never
+    touched here). Round-trips through the form like occurrences/drink_categories
+    — every submit/edit re-inserts the full current list against the NEW
+    version_id; there is no separate carry-forward branch. Runs in the caller's
+    transaction."""
+    for i, img in enumerate(images or []):
+        cursor.execute(
+            "INSERT INTO files ("
+            "  event_version_id, s3_key, file_type, content_type, size_bytes,"
+            "  is_public, sort_order, url"
+            ") VALUES (%s, %s, 'image', %s, %s, TRUE, %s, %s)",
+            (version_id, img["s3_key"], img.get("content_type"), img.get("size_bytes"), i + 1, img["url"]),
+        )
+
+
+def fetch_additional_images(cursor, version_id):
+    """Read a version's additional images (post-go-live feature) as a
+    sort_order-ordered list of {"url","s3_key","content_type"} for the edit-form
+    prefill + the public detail-page carousel. [] for a version with none (every
+    version before this feature, and any version with no extra images)."""
+    cursor.execute(
+        "SELECT url, s3_key, content_type FROM files "
+        "WHERE event_version_id = %s AND sort_order > 0 ORDER BY sort_order",
+        (version_id,),
+    )
+    return [dict(r) for r in cursor.fetchall()]
+
+
 def editable_version(cursor, event_id, published_version_id):
     """The version whose content prefills an edit form / seeds a new edit: the
     live one if the event is published, otherwise the latest submitted version."""
@@ -76,7 +111,8 @@ def editable_version(cursor, event_id, published_version_id):
 
 
 def create_edit_version(cursor, event_id, published_version_id, cleaned,
-                        supersede_reason="Superseded by a newer edit"):
+                        supersede_reason="Superseded by a newer edit",
+                        additional_images=None):
     """Create a new pending_review version from validated `cleaned` fields, handling
     the pre-/post-approval cases above. Runs entirely in the caller's transaction.
     Returns (new_version_id, is_published).
@@ -178,6 +214,11 @@ def create_edit_version(cursor, event_id, published_version_id, cleaned,
     # unchanged schedule is simply re-inserted — the carry-forward), derived from
     # the same occurrences the summary start/end above came from.
     insert_occurrences(cursor, new_version_id, cleaned.get("occurrences"))
+
+    # Re-snapshot the additional images onto the NEW version (post-go-live
+    # feature) — same round-trip pattern as occurrences above. The feature image
+    # itself is unaffected (carried forward via image_url above).
+    insert_additional_images(cursor, new_version_id, additional_images)
 
     if not is_published:
         # PRE-approval edit: move the still-authorised hold onto the new version

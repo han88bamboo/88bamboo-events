@@ -12,6 +12,10 @@ ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 IMAGE_EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 DEFAULT_MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB
 
+# Post-go-live "additional images" feature (plan.md backlog): at most 5 extra
+# images on top of the required feature image (6 total).
+MAX_ADDITIONAL_IMAGES = 5
+
 # --- Field length caps (mirror the schema's VARCHAR limits in schema.sql §7) ---
 MAX_NAME_LEN = 500
 MAX_SHORT_LEN = 255          # emails, country, city, format
@@ -162,6 +166,37 @@ def _magic_matches(content_type, data):
         # RIFF....WEBP container.
         return data[:4] == b"RIFF" and data[8:12] == b"WEBP"
     return False
+
+
+def validate_additional_images(items):
+    """Validate the (already-uploaded, via /additional-images/upload) reference
+    list a submission or edit carries for the post-go-live "additional images"
+    feature. Each item must be a dict with at least s3_key + url; at most
+    MAX_ADDITIONAL_IMAGES. This does NOT re-validate the image bytes themselves
+    (that already happened at upload time) — just the shape of the references.
+
+    Returns (cleaned, errors): `cleaned` is safe to hold/persist; `errors` is a
+    list of human-readable messages (empty => valid)."""
+    errors = []
+    if not isinstance(items, list):
+        items = []
+    if len(items) > MAX_ADDITIONAL_IMAGES:
+        errors.append(f"You can upload at most {MAX_ADDITIONAL_IMAGES} additional images.")
+        items = items[:MAX_ADDITIONAL_IMAGES]
+    cleaned = []
+    for item in items:
+        if not isinstance(item, dict) or not item.get("s3_key") or not item.get("url"):
+            errors.append("One of the additional images is missing its upload reference.")
+            continue
+        cleaned.append(
+            {
+                "s3_key": item["s3_key"],
+                "url": item["url"],
+                "content_type": item.get("content_type"),
+                "size_bytes": item.get("size_bytes"),
+            }
+        )
+    return cleaned, errors
 
 
 def validate_submission(data, allowed_categories, allowed_formats, geo=None,

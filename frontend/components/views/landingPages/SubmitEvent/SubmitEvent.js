@@ -19,6 +19,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { submissionsService } from '@/core/services/submissions';
 import { accountService } from '@/core/services/account';
+import { additionalImagesService } from '@/core/services/additionalImages';
 import { SUBMITTER_TYPES, withLegacyValue } from '@/core/constants/formOptions';
 import LocationFields from '@/components/common/LocationFields';
 import ScheduleFields, {
@@ -31,6 +32,9 @@ import CheckoutStep from './CheckoutStep';
 // still authoritative — submission_validation.py).
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_IMAGE_MB = 5;
+// Post-go-live "additional images" feature (plan.md backlog): 0-5 extra images
+// beyond the required Feature Image, shown in the detail-page carousel.
+const MAX_ADDITIONAL_IMAGES = 5;
 
 // Wizard steps (data-entry only — payment stays on the post-3a screen). Each
 // entry lists the field keys validated to gate "Next"/reveal inline errors; the
@@ -278,6 +282,11 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
   const [fields, setFields] = useState(() => initialFields(prefill, auth));
   const [selectedCategories, setSelectedCategories] = useState(prefill?.drink_categories || []);
   const [imageFile, setImageFile] = useState(null);
+  // Post-go-live "additional images" feature: 0-5 extra File objects, uploaded
+  // (via /additional-images/upload) right after the 3a feature-image submit
+  // succeeds, then carried into the 3b create-intent payload.
+  const [additionalImageFiles, setAdditionalImageFiles] = useState([]);
+  const [additionalUploadError, setAdditionalUploadError] = useState('');
 
   // EP-7 login panel (anonymous state only): request a magic link that returns to
   // /submit?token=… signed in. Log-in-first, no in-progress persistence (owner
@@ -321,6 +330,24 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
     return () => URL.revokeObjectURL(url);
   }, [imageFile]);
 
+  // Object-URL thumbnail previews for the additional images (post-go-live
+  // feature), same pattern as the feature-image preview above.
+  const [additionalPreviews, setAdditionalPreviews] = useState([]);
+  useEffect(() => {
+    const urls = additionalImageFiles.map((f) => URL.createObjectURL(f));
+    setAdditionalPreviews(urls);
+    return () => urls.forEach((u) => URL.revokeObjectURL(u));
+  }, [additionalImageFiles]);
+
+  const addAdditionalImages = (files) => {
+    const picked = Array.from(files || []);
+    if (!picked.length) return;
+    setAdditionalImageFiles((prev) => [...prev, ...picked].slice(0, MAX_ADDITIONAL_IMAGES));
+  };
+  const removeAdditionalImage = (idx) => {
+    setAdditionalImageFiles((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   const resetAll = () => {
     setResult(null);
     setConfirmation(null);
@@ -328,6 +355,8 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
     setFields(initialFields(null, auth));
     setSelectedCategories([]);
     setImageFile(null);
+    setAdditionalImageFiles([]);
+    setAdditionalUploadError('');
     setStep(0);
     setTouched({});
     setLocationTouched(false);
@@ -422,6 +451,7 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
     }
 
     setErrors([]);
+    setAdditionalUploadError('');
     setResult(null);
 
     // Client mirror of the required rules; jump to the first step with a problem
@@ -462,7 +492,34 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
         );
         return;
       }
-      setResult(data?.data || null);
+
+      // Post-go-live "additional images" feature: upload each extra file (via
+      // the shared /additional-images/upload endpoint) after the feature image
+      // is safely held, then carry the refs into the 3b payload. A failure here
+      // leaves the feature image held server-side (a benign orphan on abandon,
+      // same as any other abandoned checkout — plan §6) and lets the submitter
+      // retry without re-entering the whole form.
+      let uploadedAdditionalImages = [];
+      if (additionalImageFiles.length) {
+        try {
+          const uploads = await Promise.all(
+            additionalImageFiles.map((f) => additionalImagesService.upload(f)),
+          );
+          const failed = uploads.find((u) => !u.ok);
+          if (failed) {
+            setAdditionalUploadError(
+              failed.data?.error || 'One of the additional images failed to upload. Please try again.',
+            );
+            return;
+          }
+          uploadedAdditionalImages = uploads.map((u) => u.data?.data);
+        } catch {
+          setAdditionalUploadError('Could not upload the additional images. Please try again.');
+          return;
+        }
+      }
+
+      setResult({ ...(data?.data || {}), additional_images: uploadedAdditionalImages });
     } catch (err) {
       setErrors(['Could not reach the server. Please try again.']);
     } finally {
@@ -524,6 +581,12 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
         <p className="text-muted">
           {result.event?.city}, {result.event?.country}
         </p>
+        {result.additional_images?.length > 0 && (
+          <p className="text-muted small">
+            +{result.additional_images.length} additional image
+            {result.additional_images.length > 1 ? 's' : ''} uploaded.
+          </p>
+        )}
         <CheckoutStep
           held={result}
           token={authToken}
@@ -900,7 +963,7 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
 
           <div className="mb-4">
             <label className="form-label d-block" htmlFor="image">
-              Event image <span className="text-danger">*</span>
+              Feature image <span className="text-danger">*</span>
             </label>
             {/* Drag-and-drop zone + thumbnail preview (D1). The file picker stays
                 the primary control; dropping a file routes through the same
@@ -944,6 +1007,52 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
             <div className="form-text">JPEG, PNG, or WebP, up to {MAX_IMAGE_MB} MB.</div>
             {imageFile && <div className="form-text">Selected: {imageFile.name}</div>}
             <FieldError name="image" />
+          </div>
+
+          {/* Post-go-live "additional images" feature: 0-5 extra images shown in
+              the detail page's carousel, after the feature image. Separate,
+              optional, additive — the feature image field above is unchanged. */}
+          <div className="mb-4">
+            <label className="form-label d-block">Additional images (optional)</label>
+            {additionalPreviews.length > 0 && (
+              <div className="d-flex flex-wrap gap-2 mb-2">
+                {additionalPreviews.map((src, i) => (
+                  <div key={src} className="position-relative">
+                    <img
+                      src={src}
+                      alt={`Additional ${i + 1}`}
+                      className="img-thumbnail"
+                      style={{ height: 90, width: 90, objectFit: 'cover' }}
+                    />
+                    <button
+                      type="button"
+                      className="btn-close position-absolute top-0 end-0 bg-white rounded-circle p-1 m-1"
+                      aria-label={`Remove additional image ${i + 1}`}
+                      onClick={() => removeAdditionalImage(i)}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+            {additionalImageFiles.length < MAX_ADDITIONAL_IMAGES && (
+              <input
+                type="file"
+                className="form-control"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                onChange={(e) => {
+                  addAdditionalImages(e.target.files);
+                  e.target.value = '';
+                }}
+              />
+            )}
+            <div className="form-text">
+              Up to {MAX_ADDITIONAL_IMAGES} more images, shown in the event&apos;s photo carousel
+              (JPEG, PNG, or WebP, up to {MAX_IMAGE_MB} MB each).
+            </div>
+            {additionalUploadError && (
+              <div className="text-danger small mt-1">{additionalUploadError}</div>
+            )}
           </div>
         </div>
 

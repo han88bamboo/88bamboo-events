@@ -40,7 +40,7 @@ from notifications import (
 from organiser_names import OrganiserNameConflict
 from payments import cancel_intent, capture_intent
 from slugs import generate_unique_slug
-from submission_validation import validate_submission
+from submission_validation import validate_additional_images, validate_submission
 
 file_name = os.path.basename(__file__)
 blueprint = Blueprint(file_name[:-3], __name__)  # blueprint name == filename
@@ -144,6 +144,14 @@ def pending():
                                         ORDER BY o.sort_order, o.starts_at)
                         FROM event_occurrences o WHERE o.event_version_id = ev.id
                     ), '[]'::json)       AS occurrences,
+                    -- Additional images (post-go-live feature) so the admin edit
+                    -- modal (AdminEditModal.buildContext) can prefill the set.
+                    COALESCE((
+                        SELECT json_agg(json_build_object('url', f.url, 's3_key', f.s3_key,
+                                                           'content_type', f.content_type)
+                                        ORDER BY f.sort_order)
+                        FROM files f WHERE f.event_version_id = ev.id AND f.sort_order > 0
+                    ), '[]'::json)       AS additional_images,
                     ev.created_at,
                     e.submitter_email,
                     e.current_status     AS event_status,
@@ -582,6 +590,9 @@ def edit():
     event_fields = body.get("event") or {}
     notify = bool(body.get("notify"))
     notify_message = (body.get("notify_message") or "").strip()
+    # Post-go-live "additional images" feature: the form always resends the
+    # current full list (round-trip pattern, like drink_categories/occurrences).
+    additional_images = body.get("additional_images") or []
     if not version_id:
         return jsonify({"code": 400, "error": "version_id is required."}), 400
 
@@ -600,6 +611,8 @@ def edit():
         event_fields, allowed_categories, allowed_formats, geo,
         require_address_selection=False,
     )
+    cleaned_additional_images, additional_image_errors = validate_additional_images(additional_images)
+    errors.extend(additional_image_errors)
     if errors:
         return jsonify({"code": 400, "error": "Validation failed", "errors": errors}), 400
 
@@ -623,6 +636,7 @@ def edit():
                 row["published_version_id"],
                 cleaned,
                 supersede_reason="Superseded by an admin edit",
+                additional_images=cleaned_additional_images,
             )
 
             # Published event: the admin's edit goes live at once (repoint + keep slug).
@@ -740,6 +754,14 @@ def live():
                                         ORDER BY o.sort_order, o.starts_at)
                         FROM event_occurrences o WHERE o.event_version_id = pv.id
                     ), '[]'::json)       AS occurrences,
+                    -- Additional images (post-go-live feature) so the admin edit
+                    -- modal (AdminEditModal.buildContext) can prefill the set.
+                    COALESCE((
+                        SELECT json_agg(json_build_object('url', f.url, 's3_key', f.s3_key,
+                                                           'content_type', f.content_type)
+                                        ORDER BY f.sort_order)
+                        FROM files f WHERE f.event_version_id = pv.id AND f.sort_order > 0
+                    ), '[]'::json)       AS additional_images,
                     (pv.end_datetime IS NOT NULL AND pv.end_datetime < now()) AS is_past,
                     (SELECT count(*) FROM event_versions ev2 WHERE ev2.event_id = e.id)
                                          AS version_count,

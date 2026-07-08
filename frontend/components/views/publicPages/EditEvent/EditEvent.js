@@ -21,6 +21,11 @@ import ScheduleFields, {
   toEditableOccurrences,
   toWireOccurrences,
 } from '@/components/common/ScheduleFields';
+import { additionalImagesService } from '@/core/services/additionalImages';
+
+// Post-go-live "additional images" feature (plan.md backlog): 0-5 extra images
+// beyond the untouched Feature Image field, shown in the detail-page carousel.
+const MAX_ADDITIONAL_IMAGES = 5;
 
 // datetime-local wants 'YYYY-MM-DDTHH:MM'; the API returns full ISO strings.
 const toLocalInput = (iso) => (iso ? String(iso).slice(0, 16) : '');
@@ -74,6 +79,12 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
   });
   const pastOrganiserNames = context?.organiser_names || [];
   const [selectedCategories, setSelectedCategories] = useState(src.drink_categories || []);
+  // Post-go-live "additional images" feature: prefilled from the current
+  // version, then added/removed/reordered here; resent whole on submit
+  // (round-trip pattern, like drink_categories/occurrences).
+  const [additionalImages, setAdditionalImages] = useState(src.additional_images || []);
+  const [additionalUploading, setAdditionalUploading] = useState(false);
+  const [additionalUploadError, setAdditionalUploadError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState([]); // server/network errors (top alert)
   const [locationErrors, setLocationErrors] = useState([]); // from LocationFields
@@ -110,6 +121,42 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
   const invalidClass = (name) =>
     touched[name] && fieldErrors[name] ? ' is-invalid' : '';
 
+  // Post-go-live "additional images" feature: upload immediately on pick (the
+  // edit form isn't multipart), append the ref, up to the cap.
+  const onAddAdditionalImages = async (files) => {
+    const picked = Array.from(files || []).slice(
+      0, Math.max(0, MAX_ADDITIONAL_IMAGES - additionalImages.length),
+    );
+    if (!picked.length) return;
+    setAdditionalUploadError('');
+    setAdditionalUploading(true);
+    try {
+      const uploads = await Promise.all(picked.map((f) => additionalImagesService.upload(f)));
+      const failed = uploads.find((u) => !u.ok);
+      if (failed) {
+        setAdditionalUploadError(
+          failed.data?.error || 'One of the additional images failed to upload. Please try again.',
+        );
+        return;
+      }
+      setAdditionalImages((prev) => [...prev, ...uploads.map((u) => u.data?.data)]);
+    } catch {
+      setAdditionalUploadError('Could not upload the additional images. Please try again.');
+    } finally {
+      setAdditionalUploading(false);
+    }
+  };
+  const removeAdditionalImage = (idx) =>
+    setAdditionalImages((prev) => prev.filter((_, i) => i !== idx));
+  const moveAdditionalImage = (idx, dir) =>
+    setAdditionalImages((prev) => {
+      const next = [...prev];
+      const target = idx + dir;
+      if (target < 0 || target >= next.length) return prev;
+      [next[idx], next[target]] = [next[target], next[idx]];
+      return next;
+    });
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrors([]);
@@ -131,13 +178,16 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
       // in single-date mode occurrences is absent → the server uses the scalar
       // start/end path.
       const { occurrences, ...rest } = fields;
-      const { data, ok } = await onSubmit({
-        ...rest,
-        drink_categories: selectedCategories,
-        ...(Array.isArray(occurrences)
-          ? { occurrences: toWireOccurrences(occurrences) }
-          : {}),
-      });
+      const { data, ok } = await onSubmit(
+        {
+          ...rest,
+          drink_categories: selectedCategories,
+          ...(Array.isArray(occurrences)
+            ? { occurrences: toWireOccurrences(occurrences) }
+            : {}),
+        },
+        additionalImages,
+      );
       if (!ok) {
         setErrors(data?.errors || [data?.error || 'Could not save your edit.']);
         return;
@@ -192,6 +242,74 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
           <div className="form-text">The event image can’t be changed here.</div>
         </div>
       )}
+
+      {/* Post-go-live "additional images" feature: add/remove/reorder up to 5
+          extra images shown in the detail-page carousel. The Feature Image
+          above stays on its own unchanged path. */}
+      <div className="mb-3">
+        <label className="form-label d-block">Additional images (optional)</label>
+        {additionalImages.length > 0 && (
+          <div className="d-flex flex-wrap gap-2 mb-2">
+            {additionalImages.map((img, i) => (
+              <div key={img.s3_key || img.url} className="position-relative">
+                <img
+                  src={img.url}
+                  alt={`Additional ${i + 1}`}
+                  className="img-thumbnail"
+                  style={{ height: 90, width: 90, objectFit: 'cover' }}
+                />
+                <button
+                  type="button"
+                  className="btn-close position-absolute top-0 end-0 bg-white rounded-circle p-1 m-1"
+                  aria-label={`Remove additional image ${i + 1}`}
+                  onClick={() => removeAdditionalImage(i)}
+                />
+                <div className="d-flex justify-content-center gap-1 mt-1">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-sm py-0 px-1"
+                    aria-label={`Move additional image ${i + 1} earlier`}
+                    disabled={i === 0}
+                    onClick={() => moveAdditionalImage(i, -1)}
+                  >
+                    ←
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-sm py-0 px-1"
+                    aria-label={`Move additional image ${i + 1} later`}
+                    disabled={i === additionalImages.length - 1}
+                    onClick={() => moveAdditionalImage(i, 1)}
+                  >
+                    →
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {additionalImages.length < MAX_ADDITIONAL_IMAGES && (
+          <input
+            type="file"
+            className="form-control"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            disabled={additionalUploading}
+            onChange={(e) => {
+              onAddAdditionalImages(e.target.files);
+              e.target.value = '';
+            }}
+          />
+        )}
+        <div className="form-text">
+          Up to {MAX_ADDITIONAL_IMAGES} more images, shown in the event&apos;s photo carousel.
+          Use the arrows to reorder.
+        </div>
+        {additionalUploading && <div className="form-text">Uploading…</div>}
+        {additionalUploadError && (
+          <div className="text-danger small mt-1">{additionalUploadError}</div>
+        )}
+      </div>
 
       {errors.length > 0 && (
         <div className="alert alert-danger">

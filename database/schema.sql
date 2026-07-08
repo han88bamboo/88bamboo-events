@@ -225,7 +225,16 @@ CREATE TABLE files (
     content_type     VARCHAR(255),
     size_bytes       BIGINT,
     uploaded_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    is_public        BOOLEAN NOT NULL DEFAULT TRUE
+    is_public        BOOLEAN NOT NULL DEFAULT TRUE,
+    -- Post-go-live "additional images" feature (plan.md backlog). sort_order > 0
+    -- marks an ADDITIONAL image (detail-page carousel, 1..5, upload order); the
+    -- default 0 is the untouched existing feature-image row, which this feature
+    -- never reads (the feature image is, and stays, event_versions.image_url).
+    sort_order       INT NOT NULL DEFAULT 0,
+    -- Public URL for an additional-image row (the local stub's URL is
+    -- request-host-dependent, so it must be stored, not reconstructed from
+    -- s3_key). NULL on the existing feature-image row — nothing reads it there.
+    url              TEXT
 );
 
 -- event_occurrences — the per-date schedule of a version (EP-6 multi-date

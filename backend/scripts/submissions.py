@@ -33,7 +33,7 @@ from flask import Blueprint, jsonify, request
 from psycopg2.extras import Json
 
 from app import db_manager
-from event_versioning import insert_occurrences
+from event_versioning import insert_additional_images, insert_occurrences
 from geo_reference import load_geo
 from magic_links import create_magic_link, resolve_account_token
 from notifications import send_new_submission_admin, send_under_review
@@ -54,6 +54,7 @@ from s3_images import upload_image
 from submission_validation import (
     DEFAULT_MAX_IMAGE_BYTES,
     HONEYPOT_FIELD,
+    validate_additional_images,
     validate_image,
     validate_submission,
 )
@@ -277,6 +278,9 @@ def create_intent():
     payload = request.get_json(silent=True) or {}
     event = payload.get("event") or {}
     image = payload.get("image") or {}
+    # Post-go-live "additional images" feature: 0-5 already-uploaded refs from
+    # POST /additional-images/upload, carried alongside the feature image.
+    additional_images = payload.get("additional_images") or []
     payment_method_id = (payload.get("payment_method_id") or "").strip()
     idempotency_key = (payload.get("idempotency_key") or "").strip()
     # EP-7: the account login token, re-posted with the held payload. Re-resolved
@@ -295,6 +299,8 @@ def create_intent():
     cleaned, errors = validate_submission(event, allowed_categories, allowed_formats, geo)
     if not image.get("s3_key") or not image.get("url"):
         errors.append("Missing uploaded image reference. Please start over.")
+    cleaned_additional_images, additional_image_errors = validate_additional_images(additional_images)
+    errors.extend(additional_image_errors)
     if not payment_method_id:
         errors.append("Missing payment details.")
     if errors:
@@ -451,6 +457,10 @@ def create_intent():
                     image.get("size_bytes"),
                 ),
             )
+
+            # Post-go-live "additional images" feature: 0-5 extra files, same
+            # transaction, same immutable-per-version pattern as occurrences.
+            insert_additional_images(cursor, version_id, cleaned_additional_images)
 
             cursor.execute(
                 "INSERT INTO payments ("

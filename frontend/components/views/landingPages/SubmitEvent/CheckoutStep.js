@@ -63,6 +63,9 @@ function PayForm({ held, token, onPaid }) {
       const { data, ok, status } = await paymentsService.createIntent({
         event: held.event,
         image: held.image,
+        // Post-go-live "additional images" feature: already-uploaded refs
+        // carried from the 3a step (SubmitEvent.js).
+        additional_images: held.additional_images || [],
         payment_method_id: paymentMethod.id,
         idempotency_key: idempotencyKey,
         // EP-7: re-posted so the server re-resolves the login (forces the

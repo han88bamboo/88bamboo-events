@@ -25,7 +25,7 @@ import psycopg2
 from flask import Blueprint, jsonify, request
 
 from app import db_manager
-from event_versioning import fetch_occurrences
+from event_versioning import fetch_additional_images, fetch_occurrences
 
 file_name = os.path.basename(__file__)
 blueprint = Blueprint(file_name[:-3], __name__)  # blueprint name == filename
@@ -289,6 +289,9 @@ def by_slug(slug):
             # occurrence from the scalar summary. Only the detail read fans this
             # out; the listing/widget feeds keep the summary scalars (E-D3).
             occurrences = fetch_occurrences(cursor, row["version_id"]) if row else []
+            # Additional images (post-go-live feature) — detail-page carousel
+            # ONLY; the listing/widget feeds above still read image_url alone.
+            additional_images = fetch_additional_images(cursor, row["version_id"]) if row else []
     except psycopg2.Error:
         return jsonify({"code": 500, "error": "Database error occurred"}), 500
 
@@ -297,4 +300,5 @@ def by_slug(slug):
 
     data = dict(row)
     data["occurrences"] = occurrences
+    data["additional_images"] = additional_images
     return jsonify({"code": 200, "data": data}), 200

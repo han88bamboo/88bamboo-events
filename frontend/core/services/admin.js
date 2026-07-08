@@ -87,10 +87,15 @@ export const adminService = {
 
   // Edit a listing directly. `notify`/`notifyMessage` only take effect when the
   // edit goes live (a published-listing edit) — enforced server-side.
-  async edit(token, versionId, event, notify, notifyMessage) {
+  // `additionalImages` is the post-go-live "additional images" feature's current
+  // full list (round-trip pattern, like drink_categories/occurrences).
+  async edit(token, versionId, event, notify, notifyMessage, additionalImages = []) {
     return apiClient.post(
       '/admin/edit',
-      { version_id: versionId, event, notify: !!notify, notify_message: notifyMessage || '' },
+      {
+        version_id: versionId, event, notify: !!notify, notify_message: notifyMessage || '',
+        additional_images: additionalImages,
+      },
       { headers: authHeader(token) },
     );
   },
