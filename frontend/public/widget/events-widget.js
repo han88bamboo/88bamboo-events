@@ -57,6 +57,10 @@
     });
   }
 
+  function categories(ev) {
+    return Array.isArray(ev.drink_categories) ? ev.drink_categories.filter(Boolean) : [];
+  }
+
   // Scoped styles — injected once, all class names namespaced so they can't
   // collide with the host Shopify theme.
   function injectStyles() {
@@ -68,10 +72,14 @@
       '.bew-card{display:flex;flex-direction:column;border:1px solid #eee;border-radius:12px;overflow:hidden;text-decoration:none;color:inherit;background:#fff;transition:box-shadow .15s ease,transform .15s ease}' +
       '.bew-card:hover{box-shadow:0 6px 20px rgba(0,0,0,.10);transform:translateY(-2px)}' +
       '.bew-img{width:100%;height:150px;object-fit:cover;background:#f3f3f3}' +
+      '.bew-img-empty{display:flex;align-items:center;justify-content:center;color:#9a9a9a;font-size:.78rem}' +
       '.bew-body{padding:12px 14px;display:flex;flex-direction:column;gap:4px}' +
       '.bew-name{font-weight:600;line-height:1.25;color:#111}' +
       '.bew-meta{font-size:.82rem;color:#666}' +
-      '.bew-fmt{align-self:flex-start;margin-top:6px;font-size:.72rem;background:#EAF2EC;color:#0B4321;padding:2px 8px;border-radius:999px}' +
+      '.bew-pills{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}' +
+      '.bew-fmt,.bew-cat{display:inline-block;font-size:.72rem;line-height:1.25;padding:2px 8px;border-radius:999px}' +
+      '.bew-fmt{background:#EAF2EC;color:#0B4321}' +
+      '.bew-cat{background:#F6F1E8;color:#5f4524}' +
       '.bew-empty{color:#666;padding:20px 0}' +
       '.bew-more{display:inline-block;margin-top:16px;color:#0B4321;font-weight:600;text-decoration:none}';
     var style = h('style', { id: 'bamboo-events-widget-styles' }, [css]);
@@ -83,6 +91,8 @@
     var kids = [];
     if (ev.image_url) {
       kids.push(h('img', { class: 'bew-img', src: ev.image_url, alt: '', loading: 'lazy' }));
+    } else {
+      kids.push(h('div', { class: 'bew-img bew-img-empty' }, ['No image']));
     }
     var body = [
       h('div', { class: 'bew-name' }, [ev.name || 'Event']),
@@ -96,7 +106,12 @@
         [ev.city, ev.country].filter(Boolean).join(', '),
       ]),
     ];
-    if (ev.event_format) body.push(h('span', { class: 'bew-fmt' }, [ev.event_format]));
+    var pills = [];
+    if (ev.event_format) pills.push(h('span', { class: 'bew-fmt' }, [ev.event_format]));
+    categories(ev).forEach(function (cat) {
+      pills.push(h('span', { class: 'bew-cat' }, [cat]));
+    });
+    if (pills.length) body.push(h('div', { class: 'bew-pills' }, pills));
     kids.push(h('div', { class: 'bew-body' }, body));
     return h('a', { class: 'bew-card', href: href, target: '_top' }, kids);
   }

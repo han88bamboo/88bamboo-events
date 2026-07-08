@@ -11,10 +11,12 @@ the events API and link to the listing pages on the apex domain.
   `https://88bamboo.co/a/events/widget/events-widget.js` — same-origin with the
   storefront, through the Shopify App Proxy. (Vercel also serves the identical
   file directly at `https://events.88bamboo.co/a/events/widget/events-widget.js`
-  if you ever want to bypass the proxy for the script itself.)
+  if you ever want to bypass the proxy for the script itself.) Cards show the
+  event image, date, location, format, and drink-category pills.
 - **Rotating list widget:** `events-list-widget.js` (this folder). Served at
   `https://88bamboo.co/a/events/widget/events-list-widget.js`. It shows at most
   3 events at a time and rotates to the next batch every 5 seconds by default.
+  Rows show the event image, date, location, format, and drink-category pills.
 - **Not part of Next.js routing.** It is plain vanilla JS the browser runs
   inside the Shopify theme — no React, no iframe, no build step.
 - **Data source:** `GET https://events-api.88bamboo.co/events/widget` — an

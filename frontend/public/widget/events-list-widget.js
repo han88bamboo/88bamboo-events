@@ -2,7 +2,8 @@
  *
  * A standalone, dependency-free script for Shopify theme embeds. It uses the
  * same public upcoming-events feed as events-widget.js, but renders a compact
- * list of at most 3 events and rotates to the next batch every 5 seconds.
+ * image-led list of at most 3 events and rotates to the next batch every 5
+ * seconds.
  *
  * EMBED SNIPPET (paste into a Shopify section/page; see widget/README.md):
  *
@@ -65,22 +66,33 @@
     return [ev.city, ev.country].filter(Boolean).join(', ');
   }
 
+  function categories(ev) {
+    return Array.isArray(ev.drink_categories) ? ev.drink_categories.filter(Boolean) : [];
+  }
+
   function injectStyles() {
     if (document.getElementById(STYLE_ID)) return;
     var css =
       '.belw-wrap{font-family:inherit;margin:0 auto;max-width:900px}' +
       '.belw-title{font-size:1.1rem;font-weight:700;margin:0 0 10px;color:#0B4321}' +
-      '.belw-list{border-top:1px solid #e8e8e8;min-height:210px}' +
-      '.belw-item{display:block;min-height:70px;padding:12px 0;border-bottom:1px solid #e8e8e8;text-decoration:none;color:inherit}' +
+      '.belw-list{border-top:1px solid #e8e8e8;min-height:330px}' +
+      '.belw-item{display:grid;grid-template-columns:108px minmax(0,1fr);gap:12px;min-height:110px;padding:12px 0;border-bottom:1px solid #e8e8e8;text-decoration:none;color:inherit}' +
       '.belw-item:hover .belw-name{color:#0B4321;text-decoration:underline;text-underline-offset:3px}' +
+      '.belw-img{width:108px;height:84px;object-fit:cover;background:#f3f3f3;border-radius:6px}' +
+      '.belw-img-empty{display:flex;align-items:center;justify-content:center;color:#9a9a9a;font-size:.72rem;text-align:center}' +
+      '.belw-copy{min-width:0}' +
       '.belw-name{display:block;font-weight:650;line-height:1.3;color:#111}' +
       '.belw-meta{display:block;margin-top:4px;font-size:.84rem;line-height:1.4;color:#666}' +
-      '.belw-tag{display:inline-block;margin-top:6px;font-size:.72rem;background:#EAF2EC;color:#0B4321;padding:2px 8px;border-radius:999px}' +
+      '.belw-pills{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}' +
+      '.belw-tag,.belw-cat{display:inline-block;font-size:.72rem;line-height:1.25;padding:2px 8px;border-radius:999px}' +
+      '.belw-tag{background:#EAF2EC;color:#0B4321}' +
+      '.belw-cat{background:#F6F1E8;color:#5f4524}' +
       '.belw-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px}' +
       '.belw-count{font-size:.78rem;color:#777}' +
       '.belw-more{color:#0B4321;font-weight:650;text-decoration:none}' +
       '.belw-more:hover{text-decoration:underline;text-underline-offset:3px}' +
-      '.belw-empty{color:#666;padding:20px 0}';
+      '.belw-empty{color:#666;padding:20px 0}' +
+      '@media(max-width:520px){.belw-item{grid-template-columns:82px minmax(0,1fr);gap:10px}.belw-img{width:82px;height:64px}}';
     document.head.appendChild(h('style', { id: STYLE_ID }, [css]));
   }
 
@@ -91,14 +103,26 @@
       date += ' +' + (ev.occurrence_count - 1) + ' more dates';
     }
 
+    var pills = [];
+    if (ev.event_format) pills.push(h('span', { class: 'belw-tag' }, [ev.event_format]));
+    categories(ev).forEach(function (cat) {
+      pills.push(h('span', { class: 'belw-cat' }, [cat]));
+    });
+
     var meta = [date, locationText(ev)].filter(Boolean).join(' | ');
+    var media = ev.image_url
+      ? h('img', { class: 'belw-img', src: ev.image_url, alt: '', loading: 'lazy' })
+      : h('span', { class: 'belw-img belw-img-empty' }, ['No image']);
     var body = [
       h('span', { class: 'belw-name' }, [ev.name || 'Event']),
       h('span', { class: 'belw-meta' }, [meta]),
     ];
-    if (ev.event_format) body.push(h('span', { class: 'belw-tag' }, [ev.event_format]));
+    if (pills.length) body.push(h('span', { class: 'belw-pills' }, pills));
 
-    return h('a', { class: 'belw-item', href: href, target: '_top' }, body);
+    return h('a', { class: 'belw-item', href: href, target: '_top' }, [
+      media,
+      h('span', { class: 'belw-copy' }, body),
+    ]);
   }
 
   function batches(events, size) {
