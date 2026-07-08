@@ -15,7 +15,7 @@
 // (CheckoutStep, 3b) — the two-request contract is untouched. Validation is now
 // shown inline per field (D2, presentational only — the server stays authoritative)
 // and the image field has a thumbnail preview + drag-and-drop zone (D1).
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { submissionsService } from '@/core/services/submissions';
 import { accountService } from '@/core/services/account';
@@ -135,6 +135,114 @@ function initialFields(prefill, auth) {
   return base;
 }
 
+// Escape user text before it goes into the editor's innerHTML. contentEditable
+// is an HTML surface, so raw "<", "&", quotes etc. must be neutralised or they
+// would be parsed as markup (or open an injection hole on paste/prefill).
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Render the stored plain-text description as one <p> per paragraph. A paragraph
+// is any run of text between newlines (each return is its own paragraph, per the
+// owner) — the CSS below puts the gap BETWEEN these <p> blocks only, so soft-
+// wrapped lines inside a single paragraph stay tight together.
+function descriptionToEditorHtml(text) {
+  const paragraphs = (text || '').split(/\n+/).filter(Boolean);
+  if (!paragraphs.length) return '<p><br></p>';
+  return paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`).join('');
+}
+
+// Inverse of descriptionToEditorHtml: read the contentEditable DOM back into the
+// plain \n-separated string we actually store. Each block child (or <br>) is a
+// newline; NBSPs the browser injects are folded back to spaces. This keeps the
+// stored value byte-for-byte what a textarea would have produced, so nothing
+// downstream (validation, live-event rendering) has to change.
+function descriptionFromEditor(node) {
+  const lines = [];
+  let inlineText = '';
+
+  node.childNodes.forEach((child) => {
+    if (child.nodeType === Node.TEXT_NODE) {
+      inlineText += child.textContent || '';
+      return;
+    }
+
+    if (child.nodeType !== Node.ELEMENT_NODE) return;
+
+    if (child.tagName === 'BR') {
+      lines.push(inlineText);
+      inlineText = '';
+      return;
+    }
+
+    if (inlineText) {
+      lines.push(inlineText);
+      inlineText = '';
+    }
+    lines.push(child.textContent || '');
+  });
+
+  if (inlineText) lines.push(inlineText);
+
+  return lines
+    .join('\n')
+    .replace(/ /g, ' ')
+    .replace(/\r\n?/g, '\n')
+    .replace(/\n+$/g, '');
+}
+
+// A plain-text editor (not a rich-text one) that renders paragraph spacing while
+// keeping the stored value plain text. It replaces the description <textarea>
+// because a textarea has a single line-height and cannot space paragraphs apart
+// without also spacing wrapped lines within one paragraph. The DOM is only
+// re-synced from `value` when it has actually diverged, so typing never yanks
+// the caret to the start. Paste is forced to plain text to keep out stray markup.
+function PlainTextParagraphEditor({ id, labelledBy, value, onChange }) {
+  const editorRef = useRef(null);
+  const initialHtmlRef = useRef(descriptionToEditorHtml(value));
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    if (descriptionFromEditor(editor) !== value) {
+      editor.innerHTML = descriptionToEditorHtml(value);
+    }
+  }, [value]);
+
+  const emitChange = (editor) => onChange(descriptionFromEditor(editor));
+
+  const pastePlainText = (e) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData('text/plain');
+    document.execCommand('insertText', false, text);
+    window.setTimeout(() => emitChange(e.currentTarget), 0);
+  };
+
+  return (
+    <div
+      id={id}
+      ref={editorRef}
+      className={`form-control event-description-editor${
+        value ? '' : ' event-description-editor--empty'
+      }`}
+      role="textbox"
+      aria-labelledby={labelledBy}
+      aria-multiline="true"
+      contentEditable
+      data-placeholder="Tell attendees what to expect — drinks, hosts, what's included."
+      suppressContentEditableWarning
+      onInput={(e) => emitChange(e.currentTarget)}
+      onPaste={pastePlainText}
+      dangerouslySetInnerHTML={{ __html: initialHtmlRef.current }}
+    />
+  );
+}
+
 function SubmitEvent({ taxonomy, prefill, auth }) {
   // EP-7 login state (derived from SSR props — a login round-trip is a full
   // navigation that re-runs getServerSideProps, so nothing needs to persist here).
@@ -245,6 +353,11 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
 
   const setField = (key) => (e) =>
     setFields((prev) => ({ ...prev, [key]: e.target.value }));
+
+  // The description editor emits a plain string (not a DOM event), so it needs
+  // its own setter rather than the event-based setField above.
+  const setDescription = (value) =>
+    setFields((prev) => ({ ...prev, description: value }));
 
   // Merge a partial update (used by LocationFields, which sets several fields at
   // once from one Google selection).
@@ -732,15 +845,19 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
           </div>
 
           <div className="mb-3">
-            <label className="form-label" htmlFor="description">
+            <label
+              id="description-label"
+              className="form-label"
+              htmlFor="description"
+              onClick={() => document.getElementById('description')?.focus()}
+            >
               Description
             </label>
-            <textarea
+            <PlainTextParagraphEditor
               id="description"
-              className="form-control"
-              rows={4}
+              labelledBy="description-label"
               value={fields.description}
-              onChange={setField('description')}
+              onChange={setDescription}
             />
             <div className="form-text d-flex justify-content-between">
               <span>Tell attendees what to expect — drinks, hosts, what&apos;s included.</span>
