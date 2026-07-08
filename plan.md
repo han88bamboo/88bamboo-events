@@ -415,6 +415,7 @@ Split into two rounds: **4A = admin auth + review queue + approve/reject** (done
 - [ ] Switch to live keys (api env + Vercel publishable) + live webhook; redeploy
 - [ ] One real USD 5 submission (refund after)
 - [ ] Homepage widget pasted into the Shopify theme
+  - [x] Alternate rotating-list widget built: `frontend/public/widget/events-list-widget.js` uses the same `/events/widget` feed, shows at most 3 events, and rotates to the next batch every 5 seconds by default; paste-in snippet documented in `frontend/public/widget/README.md`.
 - [ ] Monitoring habit: expiring-soon countdown + daily digest
 
 ### Blockers / questions for the owner
