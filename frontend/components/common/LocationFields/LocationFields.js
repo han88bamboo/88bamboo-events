@@ -168,7 +168,7 @@ function LocationFields({ values, onChange, onValidationChange, initialCountries
     <>
       <div className="mb-3">
         <label className="form-label" htmlFor="venue_name">
-          Venue name
+          Venue/Restaurant/Bar Name (add floor number, unit number or door number if applicable)
         </label>
         <input
           id="venue_name"
