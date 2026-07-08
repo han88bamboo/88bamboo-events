@@ -46,41 +46,33 @@ export function verifyProxySignature(query, secret) {
   }
 }
 
-function queryFromUrl(rawUrl) {
-  if (!rawUrl || typeof rawUrl !== 'string') return null;
-
-  const parsed = new URL(rawUrl, 'http://localhost');
-  const query = {};
-  parsed.searchParams.forEach((value, key) => {
-    if (query[key] === undefined) {
-      query[key] = value;
-    } else if (Array.isArray(query[key])) {
-      query[key].push(value);
-    } else {
-      query[key] = [query[key], value];
-    }
-  });
-  return query;
-}
-
-function queryHasSignature(query) {
-  return Boolean(query && query.signature);
+function isDataRequest(ctx) {
+  // Next serves getServerSideProps for client-side <Link> transitions from its
+  // internal data endpoint, whose path always contains `/_next/data/` (basePath
+  // is irrelevant — the segment is present with or without it).
+  const url = ctx.req?.url || ctx.resolvedUrl || '';
+  return typeof url === 'string' && url.includes('/_next/data/');
 }
 
 function proxyQueryFromRequest(ctx) {
-  // Next's ctx.query includes synthetic dynamic params. The request URL query is
-  // the source of truth for what Shopify actually signed, including _next/data
-  // client transitions where the dynamic param is a real query key.
-  const fromResolvedUrl = queryFromUrl(ctx.resolvedUrl);
-  if (queryHasSignature(fromResolvedUrl)) return fromResolvedUrl;
-
-  const fromReqUrl = queryFromUrl(ctx.req?.url);
-  if (queryHasSignature(fromReqUrl)) return fromReqUrl;
-
-  // Defensive fallback for non-Next test contexts: preserve the earlier fix for
-  // full page loads where dynamic params exist in ctx.query but not the URL.
+  // ctx.query is the one reliable superset of every query key: Shopify's signed
+  // proxy params (shop, timestamp, path_prefix, signature, …) PLUS Next's merged
+  // dynamic route params (e.g. slug). It is the only source that survives a
+  // _next/data transition, where Next strips the query off ctx.req.url and
+  // ctx.resolvedUrl entirely.
   const proxyQuery = { ...ctx.query };
-  Object.keys(ctx.params || {}).forEach((key) => delete proxyQuery[key]);
+
+  // The dynamic route param needs opposite handling per request shape:
+  //   • Full page load (https://…/a/events/<slug>): Next injects `slug` into
+  //     ctx.query from the PATH; it was never in the URL Shopify signed, so it is
+  //     synthetic and MUST be stripped or the HMAC diverges.
+  //   • _next/data transition (…/<slug>.json?slug=<slug>): the SAME key is a real,
+  //     Shopify-signed query param, so it MUST be kept for the HMAC to match.
+  // Stripping unconditionally (the earlier fix) is correct for the first and wrong
+  // for the second — the exact reversal being fixed here.
+  if (!isDataRequest(ctx)) {
+    Object.keys(ctx.params || {}).forEach((key) => delete proxyQuery[key]);
+  }
   return proxyQuery;
 }
 
@@ -90,8 +82,8 @@ function proxyQueryFromRequest(ctx) {
  *
  * On dynamic routes (e.g. pages/[slug].js), Next.js merges route params into
  * ctx.query even when they were not part of the real URL. On client-side
- * _next/data transitions, those same params can be real query keys. Verify the
- * actual request URL query so both shapes match what Shopify signed.
+ * _next/data transitions, those same params ARE real, Shopify-signed query keys.
+ * Strip the synthetic ones only for full page loads (see proxyQueryFromRequest).
  *
  * @param {import('next').GetServerSidePropsContext} ctx
  */
