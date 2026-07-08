@@ -22,7 +22,7 @@ function formatDateTime(value) {
   return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
 }
 
-// Fee comes back as a numeric string/number; render it as "USD 5".
+// Fee comes back as a numeric string/number; render it as "USD 15".
 function formatFee(amount, currency) {
   if (amount == null) return '—';
   const num = Number(amount);

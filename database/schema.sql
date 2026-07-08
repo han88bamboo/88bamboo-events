@@ -30,7 +30,7 @@ CREATE EXTENSION IF NOT EXISTS unaccent;  -- accent-insensitive matching
 -- Taxonomy + pricing (standalone reference tables; drive the submission form).
 -- ===========================================================================
 
--- pricing_tiers — configurable listing prices. One row seeded (USD 5 standard);
+-- pricing_tiers — configurable listing prices. One row seeded (USD 15 standard);
 -- the data model supports more/featured tiers (plan §6, deferred UI to Phase 2).
 CREATE TABLE pricing_tiers (
     id                     SERIAL PRIMARY KEY,
@@ -309,9 +309,9 @@ CREATE INDEX idx_event_organiser_names_owner  ON event_organiser_names (owner_em
 -- seed-admin.sh so no credentials ever live in source control.
 -- ===========================================================================
 
--- Pricing: single launch tier — USD 5 standard (plan §6/§7).
+-- Pricing: single launch tier — USD 15 standard (plan §6/§7).
 INSERT INTO pricing_tiers (label, price, currency, featured_duration_days, active)
-VALUES ('Standard', 5.00, 'USD', NULL, TRUE);
+VALUES ('Standard', 15.00, 'USD', NULL, TRUE);
 
 -- Drink Category taxonomy (multi-select) — plan §7.
 INSERT INTO drink_categories (label) VALUES

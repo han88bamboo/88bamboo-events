@@ -28,9 +28,9 @@ log = logging.getLogger("notifications")
 
 
 def _format_fee(amount, currency):
-    """Render the tier fee for prose, e.g. 'USD 5' — driven by the pricing tier,
-    not a hardcoded constant (plan §6). Trims a trailing '.00' so USD 5.00 reads
-    as 'USD 5' to match the §8 wording."""
+    """Render the tier fee for prose, e.g. 'USD 15' — driven by the pricing tier,
+    not a hardcoded constant (plan §6). Trims a trailing '.00' so USD 15.00 reads
+    as 'USD 15' to match the §8 wording."""
     text = f"{amount:.2f}".rstrip("0").rstrip(".")
     return f"{currency} {text}"
 

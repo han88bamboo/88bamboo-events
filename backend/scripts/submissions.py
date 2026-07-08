@@ -250,7 +250,7 @@ def submit_event():
 
 def _active_pricing_tier():
     """Read the fee from the active pricing_tiers row (plan §6: amount + currency
-    come from the tier, seeded USD 5 — never a hardcoded constant). Returns
+    come from the tier, seeded USD 15 — never a hardcoded constant). Returns
     (amount Decimal, currency str) or (None, None) if no active tier exists."""
     with db_manager.get_cursor(commit=False) as cursor:
         cursor.execute(

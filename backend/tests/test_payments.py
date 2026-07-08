@@ -23,8 +23,8 @@ from payments import (  # noqa: E402
 
 class ToMinorUnitsTests(unittest.TestCase):
     def test_usd_two_decimal(self):
-        # USD 5.00 -> 500 cents (the seeded tier).
-        self.assertEqual(to_minor_units(Decimal("5.00"), "USD"), 500)
+        # USD 15.00 -> 1500 cents (the seeded tier).
+        self.assertEqual(to_minor_units(Decimal("15.00"), "USD"), 1500)
 
     def test_case_insensitive_currency(self):
         self.assertEqual(to_minor_units(Decimal("5.00"), "usd"), 500)

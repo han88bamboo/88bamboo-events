@@ -9,7 +9,7 @@ export function formatDateTime(value) {
 }
 
 // Fee/price comes back from the API as a numeric string (Flask serialises the
-// NUMERIC as a string). Render as "USD 5" (whole) or "USD 5.50".
+// NUMERIC as a string). Render as "USD 15" (whole) or "USD 15.50".
 export function formatFee(amount, currency) {
   if (amount == null || amount === '') return '—';
   const num = Number(amount);
