@@ -194,6 +194,13 @@ export function EventCard({ event, view }) {
   );
 }
 
+// Calendar chip labels wrap onto two ~15-char lines; anything longer than 25 chars
+// total is cut off with an ellipsis so long titles can't blow out the day cell.
+function truncateChipName(name, max = 25) {
+  if (!name || name.length <= max) return name;
+  return `${name.slice(0, max)}...`;
+}
+
 // MonthCalendar — the third view (plan §8 calendar view). Client-only (the parent
 // only renders it when view==='calendar', which is client state), so the "today"
 // highlight and Date.now() reads never run during SSR — no hydration mismatch.
@@ -296,9 +303,16 @@ function MonthCalendar({ events }) {
                     key={e.event_id}
                     href={`/${e.slug}`}
                     title={e.name}
-                    className="d-block text-truncate small rounded px-1 mt-1 text-decoration-none bg-success-subtle text-success-emphasis"
+                    className="d-block small rounded px-1 mt-1 text-decoration-none bg-success-subtle text-success-emphasis"
+                    style={{
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                      wordBreak: 'break-word',
+                    }}
                   >
-                    {e.name}
+                    {truncateChipName(e.name)}
                   </Link>
                 ))}
                 {list.length > MAX_CHIPS && (
