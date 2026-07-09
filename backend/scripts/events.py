@@ -229,6 +229,133 @@ def countries():
     return jsonify({"code": 200, "data": rows}), 200
 
 
+# The "upcoming" predicate shared by the explore aggregates below — an event is
+# upcoming if it has not ended (mirrors the when='upcoming' branch in listing()).
+_UPCOMING = "(pv.end_datetime IS NULL OR pv.end_datetime >= now())"
+
+
+@blueprint.route("/places", methods=["GET"])
+def places():
+    """Distinct published COUNTRIES and CITIES with their upcoming-event counts,
+    each tagged `kind` ('country'/'city') — the aggregate the Explore layer builds
+    on (EXPLORE-LAYER-PLAN §5.1): validating place slugs, the hub's top-N list, the
+    ≥3-events thin-content gate, and sitemap generation. A UNION of the country and
+    city columns of the same published+upcoming set; a city-state like Singapore
+    therefore appears twice (kind='country' and kind='city'), and the frontend's
+    resolvePlaceSlug prefers the country row (plan §4). RAW label values only — the
+    slug is derived frontend-side (owner decision 2026-07-09), so nothing here needs
+    the JS/Python slug logic."""
+    try:
+        with db_manager.get_cursor(commit=False) as cursor:
+            cursor.execute(
+                f"""
+                SELECT 'country' AS kind, pv.country AS value, count(*) AS upcoming_count
+                FROM events e
+                JOIN event_versions pv ON pv.id = e.published_version_id
+                WHERE e.current_status = 'published'
+                  AND {_UPCOMING}
+                  AND pv.country IS NOT NULL AND pv.country <> ''
+                GROUP BY pv.country
+                UNION ALL
+                SELECT 'city' AS kind, pv.city AS value, count(*) AS upcoming_count
+                FROM events e
+                JOIN event_versions pv ON pv.id = e.published_version_id
+                WHERE e.current_status = 'published'
+                  AND {_UPCOMING}
+                  AND pv.city IS NOT NULL AND pv.city <> ''
+                GROUP BY pv.city
+                ORDER BY upcoming_count DESC, value ASC
+                """
+            )
+            rows = [dict(r) for r in cursor.fetchall()]
+    except psycopg2.Error:
+        return jsonify({"code": 500, "error": "Database error occurred"}), 500
+
+    return jsonify({"code": 200, "data": rows}), 200
+
+
+@blueprint.route("/facets", methods=["GET"])
+def facets():
+    """The derived facet set with upcoming-event counts (EXPLORE-LAYER-PLAN §5.2):
+    distinct unnested `drink_categories`, distinct `event_format`, and the
+    (category, format) pairs that ACTUALLY CO-OCCUR in published upcoming events.
+    Feeds each place page's facet links and the admin tab's "available URLs" picker.
+
+    RAW taxonomy labels + counts only (owner decision 2026-07-09) — the frontend
+    derives every slug + H1 from these via core/utils/exploreFacets.js, keeping the
+    slug/H1 scheme single-source. 'Other' (a catch-all with no SEO value) is
+    excluded from all three groups, matching that module's dropOther. Pairs are the
+    real co-occurring set (not the cartesian product), so the crawl surface stays
+    proportional to actual data (plan §8 pair-explosion mitigation). Category counts
+    can sum above the event total because an event carries multiple categories —
+    each count is 'upcoming published events tagged with this label', which is the
+    number a facet page would show."""
+    try:
+        with db_manager.get_cursor(commit=False) as cursor:
+            cursor.execute(
+                f"""
+                SELECT cat AS category, count(*) AS upcoming_count
+                FROM events e
+                JOIN event_versions pv ON pv.id = e.published_version_id
+                CROSS JOIN LATERAL unnest(pv.drink_categories) AS cat
+                WHERE e.current_status = 'published'
+                  AND {_UPCOMING}
+                  AND cat IS NOT NULL AND cat <> '' AND lower(cat) <> 'other'
+                GROUP BY cat
+                ORDER BY upcoming_count DESC, cat ASC
+                """
+            )
+            categories = [dict(r) for r in cursor.fetchall()]
+
+            cursor.execute(
+                f"""
+                SELECT pv.event_format AS format, count(*) AS upcoming_count
+                FROM events e
+                JOIN event_versions pv ON pv.id = e.published_version_id
+                WHERE e.current_status = 'published'
+                  AND {_UPCOMING}
+                  AND pv.event_format IS NOT NULL AND pv.event_format <> ''
+                  AND lower(pv.event_format) <> 'other'
+                GROUP BY pv.event_format
+                ORDER BY upcoming_count DESC, pv.event_format ASC
+                """
+            )
+            formats = [dict(r) for r in cursor.fetchall()]
+
+            cursor.execute(
+                f"""
+                SELECT cat AS category, pv.event_format AS format, count(*) AS upcoming_count
+                FROM events e
+                JOIN event_versions pv ON pv.id = e.published_version_id
+                CROSS JOIN LATERAL unnest(pv.drink_categories) AS cat
+                WHERE e.current_status = 'published'
+                  AND {_UPCOMING}
+                  AND cat IS NOT NULL AND cat <> '' AND lower(cat) <> 'other'
+                  AND pv.event_format IS NOT NULL AND pv.event_format <> ''
+                  AND lower(pv.event_format) <> 'other'
+                GROUP BY cat, pv.event_format
+                ORDER BY upcoming_count DESC, cat ASC, pv.event_format ASC
+                """
+            )
+            pairs = [dict(r) for r in cursor.fetchall()]
+    except psycopg2.Error:
+        return jsonify({"code": 500, "error": "Database error occurred"}), 500
+
+    return (
+        jsonify(
+            {
+                "code": 200,
+                "data": {
+                    "categories": categories,
+                    "formats": formats,
+                    "pairs": pairs,
+                },
+            }
+        ),
+        200,
+    )
+
+
 @blueprint.route("/widget", methods=["GET"])
 def widget_feed():
     """The homepage-widget feed (plan §8). Upcoming published events only,

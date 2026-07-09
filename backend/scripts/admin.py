@@ -27,6 +27,7 @@ from psycopg2.extras import Json
 from app import db_manager
 from admin_auth import admin_required, issue_session_token
 from event_versioning import create_edit_version
+from explore_facets import count_explore_events, resolve_explore_path
 from geo_reference import load_geo
 from magic_links import create_conversation_link
 from notifications import (
@@ -1326,3 +1327,137 @@ def inbox():
         return jsonify({"code": 500, "error": "Database error occurred"}), 500
 
     return jsonify({"code": 200, "data": rows}), 200
+
+
+# ===========================================================================
+# Explore / SEO sitemap allowlist CRUD (EXPLORE-LAYER-PLAN §5.3 / §7A, D3b) — the
+# owner's control surface for which /explore URLs get broadcast in sitemap.xml and
+# (optionally) pinned to index. Session-guarded server-side (@admin_required): it
+# changes what Google sees, so it is one of the plan.md §5 carve-out writes, like
+# the pricing-tier CRUD above. Every write logs an admin_actions audit row.
+#
+# There is NO explore_places / explore_facets table — places and facets are
+# data-derived (D2/D3). Validating a submitted '<place>/<facet>' path server-side
+# (frontend-only slug logic can't gate a backend write) + counting its live events
+# is done by the cursor-driven resolvers in explore_facets.py — the minimal Python
+# port of the JS module's slug reversers, so the two can never drift (owner decision
+# 2026-07-09).
+# ===========================================================================
+
+
+@blueprint.route("/explore-slugs", methods=["GET"])
+@admin_required
+def list_explore_slugs():
+    """List the owner-promoted /explore URLs, each annotated with its LIVE upcoming
+    count + whether it still resolves (a place/taxonomy can change after promotion —
+    §7A shows the live count + index state per row)."""
+    try:
+        with db_manager.get_cursor(commit=False) as cursor:
+            cursor.execute(
+                "SELECT id, path, force_index, created_by, created_at "
+                "FROM explore_sitemap_slugs ORDER BY id ASC"
+            )
+            rows = [dict(r) for r in cursor.fetchall()]
+            for row in rows:
+                resolved, _ = resolve_explore_path(cursor, row["path"])
+                if resolved:
+                    row["resolves"] = True
+                    row["upcoming_count"] = count_explore_events(
+                        cursor, resolved["place"], resolved["facet"]
+                    )
+                else:
+                    row["resolves"] = False
+                    row["upcoming_count"] = 0
+    except psycopg2.Error:
+        return jsonify({"code": 500, "error": "Database error occurred"}), 500
+
+    return jsonify({"code": 200, "data": rows}), 200
+
+
+@blueprint.route("/explore-slugs", methods=["POST"])
+@admin_required
+def create_explore_slug():
+    """Promote an /explore URL into the sitemap allowlist. Validates the submitted
+    path RESOLVES to a real place/facet server-side and reports its live upcoming
+    count. A 0-event path is ALLOWED (D3b: pre-seeding a city you're about to fill)
+    but flagged so the UI can warn; a path that does not resolve is rejected."""
+    body = request.get_json(silent=True) or {}
+    # Slugs are lowercase by construction; normalise a hand-typed path (strip
+    # surrounding slashes/whitespace, lowercase) before matching. NOT slugified as a
+    # whole — that would collapse the '/' segment separator.
+    path = (body.get("path") or "").strip().strip("/").lower()
+    force_index = bool(body.get("force_index", True))
+    if not path:
+        return jsonify({"code": 400, "error": "A path is required."}), 400
+
+    try:
+        with db_manager.get_cursor() as cursor:
+            resolved, error = resolve_explore_path(cursor, path)
+            if error:
+                return jsonify({"code": 422, "error": error}), 422
+            path = resolved["path"]
+            count = count_explore_events(cursor, resolved["place"], resolved["facet"])
+
+            # Friendly duplicate check (the UNIQUE index is the real guard).
+            cursor.execute("SELECT id FROM explore_sitemap_slugs WHERE path = %s", (path,))
+            if cursor.fetchone():
+                return jsonify({"code": 409, "error": "That URL is already promoted."}), 409
+
+            cursor.execute(
+                "INSERT INTO explore_sitemap_slugs (path, force_index, created_by) "
+                "VALUES (%s, %s, %s) RETURNING id",
+                (path, force_index, g.admin_user_id),
+            )
+            slug_id = cursor.fetchone()["id"]
+            _log_action(
+                cursor,
+                None,
+                "explore_slug_create",
+                {
+                    "id": slug_id,
+                    "path": path,
+                    "force_index": force_index,
+                    "upcoming_count": count,
+                },
+            )
+    except psycopg2.Error:
+        return jsonify({"code": 500, "error": "Could not promote the URL. Please retry."}), 500
+
+    return (
+        jsonify(
+            {
+                "code": 200,
+                "data": {
+                    "id": slug_id,
+                    "path": path,
+                    "force_index": force_index,
+                    "upcoming_count": count,
+                    "warning_empty": count == 0,
+                },
+            }
+        ),
+        200,
+    )
+
+
+@blueprint.route("/explore-slugs/<int:slug_id>", methods=["DELETE"])
+@admin_required
+def delete_explore_slug(slug_id):
+    """Remove a promoted /explore URL from the sitemap allowlist. The page still
+    RENDERS on demand afterwards — this only stops it being broadcast/force-indexed."""
+    try:
+        with db_manager.get_cursor() as cursor:
+            cursor.execute(
+                "SELECT path FROM explore_sitemap_slugs WHERE id = %s", (slug_id,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return jsonify({"code": 404, "error": "Promoted URL not found."}), 404
+            cursor.execute("DELETE FROM explore_sitemap_slugs WHERE id = %s", (slug_id,))
+            _log_action(
+                cursor, None, "explore_slug_delete", {"id": slug_id, "path": row["path"]}
+            )
+    except psycopg2.Error:
+        return jsonify({"code": 500, "error": "Could not remove the URL. Please retry."}), 500
+
+    return jsonify({"code": 200, "data": {"id": slug_id, "deleted": True}}), 200

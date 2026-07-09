@@ -407,8 +407,10 @@ Legend: `[ ]` todo · `[x]` done · `[~]` in progress.
 - [x] D9 copy voice + nav placement → defaults locked, no nav item at launch (locked §11)
 
 ### Phase B — Data / config
-- [ ] `explore_sitemap_slugs` table (the ONLY new table) — starts empty; owner adds winners via the admin tab
-- [ ] NO `explore_places`, NO `explore_facets` table (both data-derived)
+- [x] `explore_sitemap_slugs` table (the ONLY new table) — starts empty; owner adds winners via the admin tab.
+      DDL in `database/schema.sql` (fresh local `docker compose up`) + hand-apply migration
+      `database/migrations/ex1-explore-sitemap.sql` (idempotent `IF NOT EXISTS`, mirrors ep7).
+- [x] NO `explore_places`, NO `explore_facets` table (both data-derived) — confirmed; none created.
 - [x] `core/utils/exploreFacets.js` — deterministic slugify + pluralize + H1 templating (+ unit tests).
       No deviation from the D3 slug/H1 scheme. Tests: `core/utils/exploreFacets.test.mjs` (17 cases,
       all pass) run via Node's built-in runner, no new dependency: `cd frontend && node --test
@@ -416,10 +418,40 @@ Legend: `[ ]` todo · `[x]` done · `[~]` in progress.
       `resolveFacetSlug`/`resolvePlaceSlug` reversers for Phase C/D to reuse.
 
 ### Phase C — Backend
-- [ ] `GET /events/places` — distinct countries+cities with upcoming counts + `kind` tag
-- [ ] `GET /events/facets` — derived category/format/pair facets with slugs + counts
-- [ ] Admin CRUD on `explore_sitemap_slugs` (`GET/POST/DELETE /admin/explore-slugs`, session-guarded, audit row)
-- [ ] Slug→place + slug→facet resolvers + confirm `/events` filters cover every facet; unit-test the mapping
+- [x] `GET /events/places` — distinct countries+cities with upcoming counts + `kind` tag. Added to
+      `backend/scripts/events.py` (routes must live in the `/events` blueprint — the loader mounts by
+      filename). UNION of the country + city columns over the published+upcoming set; a city-state
+      returns two rows (kind='country' + kind='city'). Verified locally: counts match manual SQL.
+- [x] `GET /events/facets` — distinct categories, formats, and REAL co-occurring (cat, fmt) pairs, each
+      with upcoming counts. `Other` excluded from all three groups; past events excluded. Verified
+      locally against manual SQL.
+- [x] Admin CRUD on `explore_sitemap_slugs` (`GET/POST/DELETE /admin/explore-slugs`) in
+      `backend/scripts/admin.py`, `@admin_required` (plan §5.3 carve-out), `admin_actions` audit row on
+      every write. Verified: unauthenticated + bad-token → 401; POST validates the path resolves (422
+      otherwise), reports the live count, allows count=0 with `warning_empty` (§7A pre-seeding), 409 on
+      duplicate; DELETE 404s a missing id; GET annotates each row with live count + `resolves`.
+- [x] Slug→place + slug→facet resolvers wired to real DB data + confirm `/events` filters cover every
+      facet; unit-tested. Resolvers live in `backend/explore_facets.py` (see DEVIATION below);
+      `count_explore_events` reuses the exact `/events` listing predicates (country|city, category via
+      `= ANY`, format exact, published+upcoming). Tests: `backend/tests/test_explore_facets.py`
+      (21 cases: pure slug parity with the JS module + cursor-driven resolution via a `FakeCursor`,
+      matching the `test_slugs.py` convention).
+
+> **DEVIATION / decision (owner, 2026-07-09) — slug/H1 location.** Plan §5.2's literal wording had
+> `/events/facets` return "slug + H1". Resolved to keep slug/H1 DISPLAY single-source in the JS module
+> (`frontend/core/utils/exploreFacets.js`): both `/events/places` and `/events/facets` return **RAW
+> taxonomy labels + counts**, and the frontend derives every slug + H1. The one thing that can't be
+> frontend-only — the admin `POST /admin/explore-slugs` path-validation — is backed by a MINIMAL Python
+> port of only the slug *reversers* (`slugify_label`/`pluralize_slug`/`resolve_facet_slug`/
+> `resolve_place_slug` + the cursor-driven `resolve_explore_path`/`count_explore_events`) in
+> `backend/explore_facets.py`. `facetH1`/the H1 templates were deliberately NOT ported, so the H1
+> scheme has one source of truth. Parallel tests (JS `exploreFacets.test.mjs` + Python
+> `test_explore_facets.py`) guard the two slug implementations against drift.
+>
+> **Note on `/admin/explore-slugs` POST validation:** task called for "resolves to a page WITH events".
+> Reconciled with §7A ("warns but still allows if 0, for pre-seeding") — the path must resolve
+> STRUCTURALLY (real place; real facet if present) else 422, but a 0-event count is allowed and flagged
+> via `warning_empty` in the response for the UI to surface.
 
 ### Phase D — Frontend
 - [ ] `core/utils/dateWindows.js` (+ unit tests)

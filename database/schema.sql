@@ -214,6 +214,25 @@ CREATE TABLE admin_actions (
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- explore_sitemap_slugs — the ONLY new table for the Explore SEO layer
+-- (EXPLORE-LAYER-PLAN §4, D2/D3b). Places AND facets are entirely data-derived
+-- (distinct published country/city values; the live taxonomy + co-occurring
+-- category/format pairs), so there is NO explore_places and NO explore_facets
+-- table. This one holds the owner-curated amplification allowlist: one row per
+-- place/facet URL below /explore that the owner promotes into sitemap.xml and
+-- (optionally) pins to index via force_index. It starts EMPTY — every explore
+-- page still RENDERS on demand and can rank via the hub's internal links; a row
+-- here only decides what is broadcast in the sitemap / force-indexed. Edited only
+-- through the admin "Explore / SEO" tab, admin-session-guarded server-side (it
+-- changes what Google sees — plan.md §5 carve-out).
+CREATE TABLE explore_sitemap_slugs (
+    id          SERIAL PRIMARY KEY,
+    path        VARCHAR(255) NOT NULL UNIQUE,   -- below /explore: 'singapore' or 'singapore/wine-tastings'
+    force_index BOOLEAN NOT NULL DEFAULT TRUE,  -- pin index,follow even below the >=3-events threshold
+    created_by  INTEGER REFERENCES admin_users(id) ON DELETE SET NULL,  -- who promoted it (audit)
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- files — uploaded assets in the public S3 bucket (SPEC §A5). `image` now;
 -- `press_release_pdf` reserved for a later PDF-intake phase (plan §7).
 CREATE TABLE files (
