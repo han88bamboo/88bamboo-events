@@ -558,9 +558,16 @@ Legend: `[ ]` todo · `[x]` done · `[~]` in progress.
       `force_index`-promoted page (Tokyo flipped to index); `CollectionPage`+`ItemList` and
       `BreadcrumbList` JSON-LD both parse; sitemap emits hub + promoted only; filtered `/a/events`
       carries noindex while the bare board does not.
-- [ ] Confirm nested dynamic routes verify through the proxy in prod-like config — local runs with
-      `SHOPIFY_PROXY_VERIFY=false` (no-op guard); the `ctx.params`-strip fix (commit `75b7f94`)
-      already handles nested routes, but a prod-like signed-proxy pass is still owner's to confirm.
+- [x] Confirm nested dynamic routes verify through the proxy in prod-like config. Drove a real
+      HTTP end-to-end pass with `SHOPIFY_PROXY_VERIFY=true` + a known shared secret (env-only
+      compose override on `events-web`, no code change). With a correctly Shopify-signed query
+      string (`shop`/`path_prefix`/`timestamp`/`signature`; path params NOT signed), all three
+      routes returned **200**: `/explore`, `/explore/singapore`, and nested
+      `/explore/singapore/wine-tastings`. The nested 200 is the discriminating result — it can only
+      pass if the guard stripped BOTH `place` and `facet` from the HMAC (neither was signed),
+      confirming the `ctx.params`-strip fix (commit `75b7f94`) works for two-segment routes.
+      Unsigned and tampered-signature requests returned **404** on all three, proving the guard is
+      actively enforcing (not a no-op). Container restored to `SHOPIFY_PROXY_VERIFY=false` after.
 
 ### Blockers / questions
 - (populate as they arise)
