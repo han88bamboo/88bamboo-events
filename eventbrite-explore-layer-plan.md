@@ -454,14 +454,49 @@ Legend: `[ ]` todo · `[x]` done · `[~]` in progress.
 > via `warning_empty` in the response for the UI to surface.
 
 ### Phase D — Frontend
-- [ ] `core/utils/dateWindows.js` (+ unit tests)
-- [ ] Extract shared `EventGrid`/`EventCard` from `EventListing.js`
-- [ ] `pages/explore/index.js` (hub)
-- [ ] `pages/explore/[place]/index.js` (place)
-- [ ] `pages/explore/[place]/[facet].js` (facet)
-- [ ] `ExploreFilters` (category/format/date chips, noindex query-param behaviour)
-- [ ] `Breadcrumbs` + shell + templated intro + search prompt
-- [ ] Admin "Explore / SEO" tab component (list/add/remove promoted URLs) — mirror `PricingTiers` panel + `admin.js` service
+- [x] `core/utils/dateWindows.js` (+ unit tests). 7 window keys → UTC-pinned {date_from,date_to}
+      matching EventListing's calendar convention. Tests: `core/utils/dateWindows.test.mjs`
+      (10 cases; run with the exploreFacets suite via `cd frontend && node --test
+      'core/utils/**/*.test.mjs'` → 27 pass).
+- [x] Extract shared `EventGrid`/`EventCard` from `EventListing.js` → new
+      `components/views/publicPages/EventListing/EventGrid.js` (MOVED verbatim: EventCard +
+      excerptOf + truncateAtWordBoundary). EventListing.js re-exports EventCard/
+      truncateAtWordBoundary so EventDetail's "More events" import is unchanged. Regression
+      verified live: `/a/events` renders 4 cards, detail page 3 "More events" cards — identical.
+- [x] `pages/explore/index.js` (hub) — top-N places by upcoming count from GET /events/places,
+      country-wins dedupe by slug. Placeholder <title> + unconditional `noindex,follow`.
+- [x] `pages/explore/[place]/index.js` (place) — verifyProxyRequest → resolvePlaceSlug (404 on
+      miss) → SSR grid + accurate place count. Verified: /explore/singapore, /explore/tokyo render.
+- [x] `pages/explore/[place]/[facet].js` (facet) — + resolveFacetSlug (404 on miss). Verified:
+      wine-tastings (pair, 2 events), wine (cat), masterclasses (fmt); beer-festivals + garbage → 404.
+- [x] `ExploreFilters` (category/format/date chips) — reuses EventListing's debounced
+      eventsService.getListing pattern; shallow router.replace reflects on-page query params. Whole
+      page is noindex in Phase D so no per-chip noindex needed (per plan). Chip-filter query path
+      verified against the live API.
+- [x] `Breadcrumbs` + `ExplorePageShell` (H1 + templated intro + /a/events?q= search box). Trail
+      Home › Events › Explore › {Place} › {Facet} verified rendering on the facet page.
+- [x] Admin "Explore / SEO" tab (`components/views/admin/ExploreSlugs/`, registered in
+      AdminDashboard) — mirrors `PricingTiers` panel + `admin.js` service (getExploreSlugs/
+      createExploreSlug/deleteExploreSlug). Backend GET/POST/DELETE + guard verified live with a
+      real admin token (401 unauth; 422 unresolved path; warning_empty on 0-count; 404 missing id).
+
+> **DEVIATIONS / notes (Phase D, 2026-07-09):**
+> 1. **Hub "+ owner-allowlisted slugs" deferred to Phase E.** The hub lists top-N places only;
+>    surfacing promoted slugs needs a PUBLIC read of `explore_sitemap_slugs` (only the
+>    admin-guarded CRUD exists), which belongs with the Phase E sitemap/interlinking work.
+> 2. **Facet-page upcoming count = SSR grid length** (display only). Place pages use the accurate
+>    `/events/places` aggregate; a precise per-(place,facet) count is only needed for Phase E's ≥3
+>    robots gating, so it's built there.
+> 3. **Admin `force_index` is set at add-time** (checkbox) and shown per-row as a badge; there is
+>    no in-place toggle because Phase C shipped only GET/POST/DELETE (no PUT). Changing it = remove
+>    + re-add, or a Phase E PUT if wanted.
+> 4. **Browser-click verification not re-driven here** (no connected browser in this env; desktop
+>    browsers are read-tier). Interactive layers are faithful mirrors of proven in-repo patterns
+>    (EventListing debounced refetch; PricingTiers CRUD) and their data/endpoints were verified via
+>    curl. Owner should click through the chips + admin add/remove once in a real browser.
+> 5. **Seed data:** 4 published events (`explore-*`, "Seed Venue", submitter `seed@88bamboo.co`)
+>    were inserted into the local dev DB to walk the flow. Remove with
+>    `DELETE FROM events WHERE slug LIKE 'explore-%';` (cascades to versions) if unwanted.
 
 ### Phase E — SEO plumbing
 - [ ] Extend `core/utils/seo.js` (explore URLs, CollectionPage/ItemList/BreadcrumbList)

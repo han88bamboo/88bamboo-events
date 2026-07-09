@@ -121,4 +121,30 @@ export const adminService = {
   async getInbox(token) {
     return apiClient.get('/admin/inbox', { headers: authHeader(token) });
   },
+
+  // --- Explore / SEO: the owner's sitemap/index promotion allowlist (D3b / §7A) ---
+
+  // List promoted /explore URLs, each annotated with its live count + whether it
+  // still resolves.
+  async getExploreSlugs(token) {
+    return apiClient.get('/admin/explore-slugs', { headers: authHeader(token) });
+  },
+
+  // Promote a place/facet path. The response reports the live upcoming count and a
+  // `warning_empty` flag when the path resolves but currently has 0 events (§7A
+  // pre-seeding). A path that does not resolve is rejected (422).
+  async createExploreSlug(token, path, forceIndex) {
+    return apiClient.post(
+      '/admin/explore-slugs',
+      { path, force_index: !!forceIndex },
+      { headers: authHeader(token) },
+    );
+  },
+
+  // Remove a promoted URL (the page still renders on demand afterwards).
+  async deleteExploreSlug(token, slugId) {
+    return apiClient.delete(`/admin/explore-slugs/${slugId}`, {
+      headers: authHeader(token),
+    });
+  },
 };

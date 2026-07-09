@@ -17,6 +17,7 @@ import LiveListings from '@/components/views/admin/LiveListings';
 import PricingTiers from '@/components/views/admin/PricingTiers';
 import Analytics from '@/components/views/admin/Analytics';
 import Inbox from '@/components/views/admin/Inbox';
+import ExploreSlugs from '@/components/views/admin/ExploreSlugs';
 import { adminService } from '@/core/services/admin';
 import { adminAuth } from '@/core/services/adminAuth';
 
@@ -26,6 +27,7 @@ const TABS = [
   { key: 'inbox', label: 'Inbox' },
   { key: 'pricing', label: 'Pricing' },
   { key: 'analytics', label: 'Analytics' },
+  { key: 'explore', label: 'Explore / SEO' },
 ];
 
 function AdminDashboard() {
@@ -82,6 +84,7 @@ function AdminDashboard() {
       {tab === 'inbox' && <Inbox />}
       {tab === 'pricing' && <PricingTiers />}
       {tab === 'analytics' && <Analytics />}
+      {tab === 'explore' && <ExploreSlugs />}
     </div>
   );
 }

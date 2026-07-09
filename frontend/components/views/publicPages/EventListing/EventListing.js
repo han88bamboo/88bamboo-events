@@ -12,7 +12,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { eventsService } from '@/core/services/events';
 import { BASE_PATH } from '@/core/utils/seo';
-import { formatDateRange, isPastEvent } from '../publicFormat';
+import EventGrid, { EventCard, truncateAtWordBoundary } from './EventGrid';
+
+// Re-export the shared card + truncation from their new home so existing importers
+// (EventDetail's "More events" row) keep working unchanged after the extraction.
+export { EventCard, truncateAtWordBoundary };
 
 const WHEN_OPTIONS = [
   { value: 'upcoming', label: 'Upcoming' },
@@ -93,105 +97,6 @@ function buildParams(f) {
   if (f.when) p.when = f.when;
   if (f.preferred_country) p.preferred_country = f.preferred_country;
   return p;
-}
-
-// Cut `text` to at most `maxLen` chars on a word boundary, with an ellipsis.
-// Shared by the card excerpt below and the detail page's "Read more" truncation
-// (EventDetail.js) so both trim text the same way.
-export function truncateAtWordBoundary(text, maxLen) {
-  if (text.length <= maxLen) return text;
-  const cut = text.slice(0, maxLen);
-  const lastSpace = cut.lastIndexOf(' ');
-  return `${(lastSpace > maxLen / 2 ? cut.slice(0, lastSpace) : cut).trim()}…`;
-}
-
-// Short editorial excerpt for a card: first ~120 chars of the description, on a
-// word boundary, with an ellipsis. Empty when there's no description (the card
-// falls back to the date/place lines).
-function excerptOf(event) {
-  const d = (event.description || '').trim().replace(/\s+/g, ' ');
-  if (!d) return '';
-  return truncateAtWordBoundary(d, 120);
-}
-
-// Exported so the detail page's "More events" row (SP-2) can reuse the exact same
-// card rather than duplicating it — it only needs fields already in _PUBLIC_COLUMNS.
-export function EventCard({ event, view }) {
-  const past = isPastEvent(event);
-  const href = `/${event.slug}`; // basePath '/a/events' is prepended by next/link
-  const categories = event.drink_categories || [];
-
-  if (view === 'list') {
-    return (
-      <Link
-        href={href}
-        className={`list-group-item list-group-item-action d-flex gap-3 align-items-center ${past ? 'opacity-75' : ''}`}
-      >
-        {event.image_url && (
-          <img
-            src={event.image_url}
-            alt=""
-            style={{ width: 88, height: 66, objectFit: 'cover' }}
-            className="rounded flex-shrink-0"
-          />
-        )}
-        <div className="flex-grow-1">
-          <div className="d-flex align-items-center gap-2">
-            <h6 className="mb-0">{event.name}</h6>
-            {past && <span className="badge bg-secondary">This event is over</span>}
-          </div>
-          <div className="small text-muted">
-            {formatDateRange(event.start_datetime, event.end_datetime)}
-            {/* Multi-date hint (EP-6): the card shows the full first→last range plus
-                an "N dates" count; the feed carries only the summary + count. */}
-            {event.occurrence_count > 1 && ` · ${event.occurrence_count} dates`}
-          </div>
-          <div className="small text-muted">
-            {[event.venue_name, event.city, event.country].filter(Boolean).join(' · ')}
-          </div>
-        </div>
-        {event.event_format && (
-          <span className="badge bg-light text-dark align-self-start">
-            {event.event_format}
-          </span>
-        )}
-      </Link>
-    );
-  }
-
-  // grid card — editorial article-card shell (STYLE-PARITY-PLAN §8, reference §11):
-  // native-ratio-cover image on top, Buenard title, muted date/place, short
-  // excerpt, and a tertiary "View event" pill; light format/past badges for scan.
-  const place = [event.venue_name, event.city, event.country].filter(Boolean).join(' · ');
-  return (
-    <div className="col-sm-6 col-lg-4 mb-4">
-      <Link href={href} className="text-decoration-none text-reset d-block h-100">
-        <article className={`event-card ${past ? 'opacity-75' : ''}`}>
-          <div className="event-card__imgwrap">
-            {event.image_url && (
-              <img src={event.image_url} alt="" className="event-card__img" />
-            )}
-          </div>
-          <div className="event-card__body">
-            <div className="d-flex flex-wrap gap-1 mb-2">
-              {past && <span className="badge-bamboo badge-bamboo--muted">This event is over</span>}
-              {event.event_format && <span className="badge-bamboo">{event.event_format}</span>}
-            </div>
-            <h3 className="event-card__title">{event.name}</h3>
-            <div className="event-card__date">
-              {formatDateRange(event.start_datetime, event.end_datetime)}
-              {event.occurrence_count > 1 && ` · ${event.occurrence_count} dates`}
-            </div>
-            {place && <div className="event-card__place">{place}</div>}
-            {excerptOf(event) && <p className="event-card__excerpt">{excerptOf(event)}</p>}
-            <span className="bamboo-btn bamboo-btn--tertiary bamboo-btn--small mt-auto align-self-start">
-              View event
-            </span>
-          </div>
-        </article>
-      </Link>
-    </div>
-  );
 }
 
 // Calendar chip labels wrap onto two ~15-char lines; anything longer than 25 chars
@@ -550,18 +455,8 @@ function EventListing({ initialEvents = [], taxonomy, countries = [], initialFil
         </div>
       ) : view === 'calendar' ? (
         <MonthCalendar events={events} />
-      ) : view === 'grid' ? (
-        <div className="row">
-          {events.map((e) => (
-            <EventCard key={e.event_id} event={e} view="grid" />
-          ))}
-        </div>
       ) : (
-        <div className="list-group">
-          {events.map((e) => (
-            <EventCard key={e.event_id} event={e} view="list" />
-          ))}
-        </div>
+        <EventGrid events={events} view={view} />
       )}
 
       <p className="text-muted small mt-4">

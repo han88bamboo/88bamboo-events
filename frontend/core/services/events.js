@@ -20,6 +20,22 @@ export const eventsService = {
     return response.data?.data || [];
   },
 
+  // Explore layer (EXPLORE-LAYER-PLAN §5): distinct published countries + cities with
+  // upcoming counts, each tagged `kind` ('country'/'city'). Drives place-slug
+  // resolution, the hub's top-N list, and place-page counts.
+  async getPlaces() {
+    const response = await apiClient.get('/events/places');
+    return response.data?.data || [];
+  },
+
+  // Explore layer: the derived facet set with upcoming counts — distinct drink
+  // categories, event formats, and the (category, format) pairs that co-occur. RAW
+  // labels; slug/H1 are derived frontend-side (core/utils/exploreFacets.js).
+  async getFacets() {
+    const response = await apiClient.get('/events/facets');
+    return response.data?.data || { categories: [], formats: [], pairs: [] };
+  },
+
   // A single published event by canonical slug. Returns the event object or null
   // (a non-published / unknown slug 404s -> null, letting the page notFound).
   async getBySlug(slug) {
