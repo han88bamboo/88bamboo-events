@@ -136,6 +136,19 @@ export function resolveFacetSlug(slug, categories, formats) {
   return buildFacetSlugMap(categories, formats).get(slug) || null;
 }
 
+/**
+ * facetSlug — the canonical URL slug for a resolved facet ({ category, format }), the
+ * inverse of resolveFacetSlug: pair → 'wine-tastings', category-only → 'wine',
+ * format-only → 'tastings'. Lets a page rebuild its own facet path/canonical from the
+ * resolved labels without threading the raw route param through props.
+ */
+export function facetSlug({ category, format } = {}) {
+  if (category && format) return pairFacetSlug(category, format);
+  if (category) return categoryFacetSlug(category);
+  if (format) return formatFacetSlug(format);
+  return '';
+}
+
 /** placeSlug — a country or city display name as an explore place slug. 'Hong Kong' → 'hong-kong'. */
 export function placeSlug(value) {
   return slugifyLabel(value);

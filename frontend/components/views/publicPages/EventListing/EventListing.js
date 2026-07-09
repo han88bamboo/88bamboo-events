@@ -464,6 +464,12 @@ function EventListing({ initialEvents = [], taxonomy, countries = [], initialFil
         <code>{BASE_PATH}/&lt;event&gt;</code>. Organisers can update a listing via
         the edit link emailed to them.
       </p>
+
+      {/* Interlink to the Explore hub (EXPLORE-LAYER-PLAN §7) — gives the explore
+          landing pages a crawl path from the main board. */}
+      <p className="text-muted small">
+        Browse by city on the <Link href="/explore">Explore events hub</Link>.
+      </p>
     </main>
   );
 }

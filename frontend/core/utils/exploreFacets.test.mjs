@@ -18,6 +18,7 @@ import {
   facetH1,
   buildFacetSlugMap,
   resolveFacetSlug,
+  facetSlug,
   placeSlug,
   resolvePlaceSlug,
 } from './exploreFacets.js';
@@ -135,6 +136,15 @@ test('resolveFacetSlug: resolves each kind to the right axes', () => {
   assert.deepEqual(resolveFacetSlug('wine-tastings', CATEGORIES, FORMATS), { category: 'Wine', format: 'Tasting' });
   // hyphen-containing category resolves as a single facet, not a naive split:
   assert.deepEqual(resolveFacetSlug('tequila-mezcal', CATEGORIES, FORMATS), { category: 'Tequila/Mezcal', format: null });
+});
+
+// facetSlug — the exact inverse of resolveFacetSlug (Phase E: rebuilds a page's own
+// canonical/breadcrumb path from the resolved { category, format } labels).
+test('facetSlug: round-trips every generated facet back to its slug', () => {
+  const map = buildFacetSlugMap(CATEGORIES, FORMATS);
+  for (const [slug, facet] of map) {
+    assert.equal(facetSlug(facet), slug, `facet ${slug}`);
+  }
 });
 
 test('resolveFacetSlug: null for garbage input', () => {

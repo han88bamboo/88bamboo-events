@@ -499,18 +499,68 @@ Legend: `[ ]` todo · `[x]` done · `[~]` in progress.
 >    `DELETE FROM events WHERE slug LIKE 'explore-%';` (cascades to versions) if unwanted.
 
 ### Phase E — SEO plumbing
-- [ ] Extend `core/utils/seo.js` (explore URLs, CollectionPage/ItemList/BreadcrumbList)
-- [ ] Titles/H1/meta templates
-- [ ] noindex-below-threshold gating
-- [ ] Extend `sitemap.xml.js` to emit hub + `explore_sitemap_slugs` (owner-curated), not every auto-page
-- [ ] Interlinking: hub↔place↔facet↔board (hub links top-N places to avoid crawl-flooding)
+- [x] Extend `core/utils/seo.js` (explore URLs, CollectionPage/ItemList/BreadcrumbList). Added
+      `exploreCanonicalUrl(placeSlug?, facetSlug?)` (apex form, same `CANONICAL_BASE` pattern;
+      no-arg → hub), `buildCollectionPageJsonLd({name,url,description,events})` (`CollectionPage`
+      → `ItemList`, each `ListItem.item` reusing `buildEventJsonLd`'s Event shape with the nested
+      `@context` stripped + multi-date collapsed to first occurrence), and
+      `buildBreadcrumbListJsonLd(crumbs)`. Also added `facetSlug({category,format})` to
+      `exploreFacets.js` — the exact inverse of `resolveFacetSlug`, so a page rebuilds its own
+      canonical/breadcrumb path from the resolved labels (new round-trip test; suite now 28 pass).
+- [x] Titles/H1/meta templates. Place + facet `<title>` = H1 + " | 88 Bamboo Events" (both pages
+      were missing the suffix in Phase D). Meta description templated from place/facet + live
+      count, mirroring `eventMetaDescription`'s voice. Verified via view-source on every page type.
+- [x] noindex-below-threshold gating (D2). Replaced Phase D's hardcoded `noindex,follow` on the
+      place + facet pages with the real rule: `index,follow` if `upcomingCount >= 3` OR the
+      resolved path is force_index'd on the allowlist, else `noindex,follow`. The hub is always
+      `index,follow` (the indexable entry point). Verified: Singapore (3) → index; Tokyo (1) →
+      noindex; Tokyo after a `force_index` promotion → index; pair/category <3 → noindex.
+- [x] Extend `sitemap.xml.js` to emit hub + `explore_sitemap_slugs` (owner-curated), not every
+      auto-page. Emits `/explore` + every promoted path that currently resolves (via the new
+      public read below). Verified: sitemap listed the hub + the one promoted `/explore/tokyo`
+      only — no other auto-generated place/facet.
+- [x] Interlinking: hub↔place↔facet↔board. Place pages render real `<Link>` anchors to their
+      category-only + format-only facet pages — derived from the categories/formats ACTUALLY
+      present in that place's SSR grid (no extra fetch, no links to empty facet pages), pair
+      facets excluded per D3 (`FacetLinks` component). The `/a/events` board links to the
+      `/explore` hub (footer line in `EventListing`). The hub now also surfaces the promoted
+      allowlist slugs as a "Popular" strip (Phase D deviation #1 resolved — the public read exists
+      now). Verified all four link sets in view-source.
+- [x] D7 cannibalisation: `pages/index.js` emits `noindex,follow` when the SSR-seeded
+      `initialFilters` go beyond the `when=upcoming` default (any of
+      q/category/format/country/city/date_from/date_to/preferred_country, or a non-default
+      `when`); the bare board stays indexable, canonical already points at the bare board.
+      Verified: bare `/a/events` → no robots meta; `/a/events?category=Wine` → noindex,follow.
+      (Kept the existing bare-board canonical; the fuller "canonical filtered state → matching
+      explore page" is the D7A stretch, still a Phase 2 candidate.)
 - [ ] ⏳ DEFERRED (Phase 2, per D4): indexable date-window URLs `/explore/<place>/<facet>/<date-window>` with
       canonical/lastmod handling — the "…This Weekend in…" page type. Not built at launch; left as a known next step.
 
+> **DEVIATION / decision (Phase E, 2026-07-09) — public explore-slugs read endpoint.** The SSR
+> robots gate + the sitemap both need to know which paths the owner force_index'd/promoted, but
+> the only Phase C endpoint (`GET /admin/explore-slugs`) is admin-Bearer-guarded and the public
+> Next SSR process has no admin token. Resolved by adding a small UNGUARDED
+> `GET /events/explore-slugs` in `backend/scripts/events.py` (mirroring the `/places`/`/facets`
+> pattern), returning only `[{path, force_index}]` for rows that currently resolve — no
+> `created_by`/`created_at`/audit fields, since it is fully public exactly like `/sitemap.xml`
+> itself (consistent with D3b: the sitemap is already meant to be public). The admin CRUD remains
+> the only WRITE surface. Frontend consumes it via `eventsService.getExploreSlugs()` +
+> `exploreData.isPathForceIndexed(path)`. This was a natural implementation detail, not an
+> owner-ruling change.
+
 ### Phase F — Verify
-- [ ] Local end-to-end: seed events across ≥2 places, walk hub→place→facet→event
-- [ ] View-source check: correct `<title>`, canonical, JSON-LD, robots per page
-- [ ] Confirm nested dynamic routes verify through the proxy in prod-like config
+- [x] Local end-to-end: seed events across ≥2 places, walk hub→place→facet→event. Reused the
+      Phase D seed (Singapore ×3 published upcoming, Japan/Tokyo ×1). Rebuilt `events-api` +
+      `events-web` (backend/frontend are baked into the images, not volume-mounted) and curled the
+      whole flow: hub → `/explore/singapore` → `/explore/singapore/wine-tastings` → event pages.
+- [x] View-source check: correct `<title>`, canonical, JSON-LD, robots per page. Verified on a
+      ≥3-event page (Singapore, index), a <3-event page (Tokyo/pair/category, noindex), and a
+      `force_index`-promoted page (Tokyo flipped to index); `CollectionPage`+`ItemList` and
+      `BreadcrumbList` JSON-LD both parse; sitemap emits hub + promoted only; filtered `/a/events`
+      carries noindex while the bare board does not.
+- [ ] Confirm nested dynamic routes verify through the proxy in prod-like config — local runs with
+      `SHOPIFY_PROXY_VERIFY=false` (no-op guard); the `ctx.params`-strip fix (commit `75b7f94`)
+      already handles nested routes, but a prod-like signed-proxy pass is still owner's to confirm.
 
 ### Blockers / questions
 - (populate as they arise)

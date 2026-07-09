@@ -30,6 +30,18 @@ export function listingCanonicalUrl() {
   return CANONICAL_BASE;
 }
 
+// Canonical URL for an Explore page (EXPLORE-LAYER-PLAN §7). Apex form, same
+// CANONICAL_BASE pattern as the event/listing canonicals. No args → the hub
+// (/explore); a place slug → the place page; place + facet slug → the facet page.
+// A filtered on-page state (query params) canonicals back to its bare page, so the
+// callers pass only the resolved place/facet slugs, never the query.
+export function exploreCanonicalUrl(placeSlug, facetSlug) {
+  let url = `${CANONICAL_BASE}/explore`;
+  if (placeSlug) url += `/${placeSlug}`;
+  if (placeSlug && facetSlug) url += `/${facetSlug}`;
+  return url;
+}
+
 // A concise meta description from the event (falls back to a generic line).
 export function eventMetaDescription(event) {
   const desc = (event?.description || '').trim();
@@ -112,4 +124,55 @@ export function buildEventJsonLd(event) {
     return occurrences.map((o) => buildOneEvent(event, o.start, o.end));
   }
   return buildOneEvent(event, occurrences[0].start, occurrences[0].end);
+}
+
+// The per-event shape for an ItemList entry: reuse buildEventJsonLd's Event object,
+// collapsing a multi-date event to its first occurrence (the collection LISTS the
+// event; the detail page carries the full occurrence set) and dropping the redundant
+// nested '@context' (the enclosing CollectionPage already declares it).
+function eventItemShape(event) {
+  const ld = buildEventJsonLd(event);
+  const one = Array.isArray(ld) ? ld[0] : ld;
+  const { '@context': _context, ...rest } = one;
+  return rest;
+}
+
+// Build the CollectionPage + ItemList JSON-LD for an Explore page (EXPLORE-LAYER-PLAN
+// §7): a CollectionPage whose mainEntity is an ordered ItemList of the events on the
+// page, each item reusing buildEventJsonLd's per-event Event shape. `name`/`url`
+// mirror the page's H1/canonical; `description` is optional.
+export function buildCollectionPageJsonLd({ name, url, description, events = [] }) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    ...(name ? { name } : {}),
+    ...(url ? { url } : {}),
+    ...(description ? { description } : {}),
+    mainEntity: {
+      '@type': 'ItemList',
+      numberOfItems: events.length,
+      itemListElement: events.map((event, i) => ({
+        '@type': 'ListItem',
+        position: i + 1,
+        url: eventCanonicalUrl(event?.slug),
+        item: eventItemShape(event),
+      })),
+    },
+  };
+}
+
+// Build BreadcrumbList JSON-LD from an ordered crumb list (EXPLORE-LAYER-PLAN §7).
+// Each crumb is { name, url? }; the LAST (current page) may omit `url`. URLs must be
+// absolute apex form — the callers build them with CANONICAL_BASE/exploreCanonicalUrl.
+export function buildBreadcrumbListJsonLd(crumbs = []) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: crumbs.map((crumb, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      name: crumb.name,
+      ...(crumb.url ? { item: crumb.url } : {}),
+    })),
+  };
 }

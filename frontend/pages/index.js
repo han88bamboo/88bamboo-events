@@ -18,6 +18,14 @@ const QUERY_KEYS = [
   'date_from', 'date_to', 'when', 'preferred_country',
 ];
 
+// D7 cannibalisation (EXPLORE-LAYER-PLAN §3 D7A): the BARE board stays indexable, but a
+// filtered query-param state must NOT compete with the Explore pages for the same query,
+// so it gets noindex,follow. "Filtered" = any of these params present, or a non-default
+// `when` — i.e. anything beyond the implicit `when=upcoming` default.
+const FILTER_KEYS = [
+  'q', 'category', 'format', 'country', 'city', 'date_from', 'date_to', 'preferred_country',
+];
+
 export async function getServerSideProps(ctx) {
   // App Proxy guard — pass-through locally (SHOPIFY_PROXY_VERIFY=false).
   const { valid } = verifyProxyRequest(ctx);
@@ -47,6 +55,10 @@ export async function getServerSideProps(ctx) {
 }
 
 function ListingPage(props) {
+  const { initialFilters = {} } = props;
+  const filtered =
+    initialFilters.when !== 'upcoming' || FILTER_KEYS.some((k) => initialFilters[k]);
+
   return (
     <>
       <Head>
@@ -55,6 +67,9 @@ function ListingPage(props) {
           name="description"
           content="Discover upcoming drinks and hospitality events worldwide — tastings, masterclasses, bar takeovers and more on the 88 Bamboo events board."
         />
+        {/* Filtered query-param states are noindex,follow (D7A) — the canonical below
+            still points at the bare board, so equity consolidates there. */}
+        {filtered && <meta name="robots" content="noindex,follow" />}
         <link rel="canonical" href={listingCanonicalUrl()} />
       </Head>
       <WithLayout layout={Main} component={EventListing} {...props} />

@@ -26,6 +26,7 @@ from flask import Blueprint, jsonify, request
 
 from app import db_manager
 from event_versioning import fetch_additional_images, fetch_occurrences
+from explore_facets import resolve_explore_path
 
 file_name = os.path.basename(__file__)
 blueprint = Blueprint(file_name[:-3], __name__)  # blueprint name == filename
@@ -354,6 +355,34 @@ def facets():
         ),
         200,
     )
+
+
+@blueprint.route("/explore-slugs", methods=["GET"])
+def explore_slugs():
+    """The owner's promoted Explore URLs — the PUBLIC read of the sitemap allowlist
+    (EXPLORE-LAYER-PLAN §7/§7A). Unguarded by design, exactly like /sitemap.xml and
+    /places/facets: the SSR explore pages (robots gating) and the sitemap both need to
+    know which paths the owner pinned, and neither carries an admin token. Returns just
+    [{path, force_index}] for rows that CURRENTLY RESOLVE (a place/taxonomy can change
+    after promotion) — no created_by / created_at / audit fields, since this is fully
+    public. The admin CRUD (/admin/explore-slugs) remains the only WRITE surface."""
+    try:
+        with db_manager.get_cursor(commit=False) as cursor:
+            cursor.execute(
+                "SELECT path, force_index FROM explore_sitemap_slugs ORDER BY id ASC"
+            )
+            rows = [dict(r) for r in cursor.fetchall()]
+            resolved_rows = []
+            for row in rows:
+                resolved, _ = resolve_explore_path(cursor, row["path"])
+                if resolved:
+                    resolved_rows.append(
+                        {"path": resolved["path"], "force_index": row["force_index"]}
+                    )
+    except psycopg2.Error:
+        return jsonify({"code": 500, "error": "Database error occurred"}), 500
+
+    return jsonify({"code": 200, "data": resolved_rows}), 200
 
 
 @blueprint.route("/widget", methods=["GET"])

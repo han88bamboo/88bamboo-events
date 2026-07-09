@@ -1,12 +1,9 @@
-// pages/explore/index.js — the Explore hub (EXPLORE-LAYER-PLAN §6). Thin SSR page:
+// pages/explore/index.js — the Explore hub (EXPLORE-LAYER-PLAN §6/§7). Thin SSR page:
 // verify the App Proxy signature, list the top-N places by upcoming-event count (from
-// GET /events/places), and link each to its place landing page. Phase D: placeholder
-// <title> + UNCONDITIONAL noindex,follow; the sitemap/allowlist amplification and the
-// full hub↔place↔facet interlinking are Phase E.
-//
-// NOTE: the plan's "+ owner-allowlisted slugs" on the hub is deferred to Phase E — those
-// live in explore_sitemap_slugs, which has no PUBLIC read endpoint yet (only the
-// admin-guarded CRUD from Phase C); surfacing them belongs with the Phase E sitemap work.
+// GET /events/places), and link each to its place landing page. Phase E: the hub is the
+// indexable entry point (index,follow + canonical + BreadcrumbList JSON-LD), and it now
+// also surfaces the owner-promoted allowlist slugs (via the public /events/explore-slugs
+// read added this round) so those pages get a crawl path from the hub too.
 import Head from 'next/head';
 import Link from 'next/link';
 
@@ -14,17 +11,35 @@ import WithLayout from '@/components/WithLayout';
 import { Main } from '@/components/layouts';
 import { eventsService } from '@/core/services/events';
 import { placeSlug } from '@/core/utils/exploreFacets';
+import {
+  CANONICAL_BASE,
+  buildBreadcrumbListJsonLd,
+  exploreCanonicalUrl,
+} from '@/core/utils/seo';
 import { verifyProxyRequest } from '@/core/utils/shopifyProxy';
 
 const TOP_N = 24;
+
+// Humanise an allowlist path ('singapore/wine-tastings') into a readable link label
+// ('Singapore / Wine Tastings') — display only, never re-parsed into a slug.
+function humanisePath(path) {
+  return path
+    .split('/')
+    .map((seg) => seg.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()))
+    .join(' / ');
+}
 
 export async function getServerSideProps(ctx) {
   const { valid } = verifyProxyRequest(ctx);
   if (!valid) return { notFound: true };
 
   let places = [];
+  let promoted = [];
   try {
-    places = await eventsService.getPlaces();
+    [places, promoted] = await Promise.all([
+      eventsService.getPlaces(),
+      eventsService.getExploreSlugs(),
+    ]);
   } catch {
     // Degrade gracefully: render an empty hub if the API is unreachable.
   }
@@ -45,15 +60,37 @@ export async function getServerSideProps(ctx) {
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
     .slice(0, TOP_N);
 
-  return { props: { topPlaces } };
+  // Promoted allowlist paths as { path, label } for the "Popular" strip (D2's amplified
+  // set). The public read already returns only paths that currently resolve.
+  const promotedLinks = (promoted || []).map((s) => ({
+    path: s.path,
+    label: humanisePath(s.path),
+  }));
+
+  return { props: { topPlaces, promotedLinks } };
 }
 
-function ExploreHubView({ topPlaces = [] }) {
+function ExploreHubView({ topPlaces = [], promotedLinks = [] }) {
+  const canonical = exploreCanonicalUrl();
+  const jsonLd = buildBreadcrumbListJsonLd([
+    { name: 'Events', url: CANONICAL_BASE },
+    { name: 'Explore', url: canonical },
+  ]);
+
   return (
     <main className="page-width py-5">
       <Head>
         <title>Explore drinks &amp; hospitality events by city — 88 Bamboo</title>
-        <meta name="robots" content="noindex,follow" />
+        <meta
+          name="description"
+          content="Explore upcoming drinks and hospitality events by city — tastings, masterclasses, bar takeovers and more on the 88 Bamboo events board."
+        />
+        <meta name="robots" content="index,follow" />
+        <link rel="canonical" href={canonical} />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
       </Head>
       <nav aria-label="Breadcrumb" className="mb-3">
         <ol className="breadcrumb small mb-0">
@@ -94,6 +131,23 @@ function ExploreHubView({ topPlaces = [] }) {
               </Link>
             </div>
           ))}
+        </div>
+      )}
+
+      {promotedLinks.length > 0 && (
+        <div className="mt-4">
+          <div className="form-label small mb-2">Popular</div>
+          <div className="d-flex flex-wrap gap-2">
+            {promotedLinks.map((p) => (
+              <Link
+                key={p.path}
+                href={`/explore/${p.path}`}
+                className="badge rounded-pill bg-light text-dark text-decoration-none border"
+              >
+                {p.label}
+              </Link>
+            ))}
+          </div>
         </div>
       )}
 

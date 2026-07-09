@@ -36,6 +36,14 @@ export const eventsService = {
     return response.data?.data || { categories: [], formats: [], pairs: [] };
   },
 
+  // Explore layer (Phase E): the owner's promoted sitemap/index allowlist as
+  // [{ path, force_index }] for paths that currently resolve. PUBLIC read (the admin
+  // CRUD is the write surface) — feeds the SSR robots gating + sitemap generation.
+  async getExploreSlugs() {
+    const response = await apiClient.get('/events/explore-slugs');
+    return response.data?.data || [];
+  },
+
   // A single published event by canonical slug. Returns the event object or null
   // (a non-published / unknown slug 404s -> null, letting the page notFound).
   async getBySlug(slug) {

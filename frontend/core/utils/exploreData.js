@@ -7,6 +7,22 @@
 import { eventsService } from '@/core/services/events';
 import { resolveFacetSlug, resolvePlaceSlug } from './exploreFacets';
 
+/**
+ * isPathForceIndexed — is a resolved explore path (below /explore, e.g. 'singapore'
+ * or 'singapore/wine-tastings') on the owner's sitemap allowlist with force_index?
+ * Drives the D2 robots gate's OR-clause: a promoted page is index,follow even below
+ * the ≥3-events threshold. Degrades to false if the allowlist read fails (the count
+ * threshold still applies), so a transient API error never wrongly indexes a page.
+ */
+export async function isPathForceIndexed(path) {
+  try {
+    const slugs = await eventsService.getExploreSlugs();
+    return slugs.some((s) => s.path === path && s.force_index);
+  } catch {
+    return false;
+  }
+}
+
 // Split the /events/places rows into distinct country + city label lists (each row is
 // { kind, value, upcoming_count }); a city-state contributes to both.
 function splitPlaces(places) {

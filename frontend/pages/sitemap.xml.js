@@ -10,9 +10,9 @@
 // to 100 events. If the board outgrows that, split into paginated child sitemaps
 // (SPEC §B3 /sitemap-listings/[page]) behind a sitemap index — the growth path.
 import { eventsService } from '@/core/services/events';
-import { eventCanonicalUrl, listingCanonicalUrl } from '@/core/utils/seo';
+import { eventCanonicalUrl, exploreCanonicalUrl, listingCanonicalUrl } from '@/core/utils/seo';
 
-function buildSitemap(events) {
+function buildSitemap(events, exploreSlugs) {
   const listingEntry =
     `<url><loc>${listingCanonicalUrl()}</loc><changefreq>daily</changefreq></url>`;
 
@@ -26,27 +26,50 @@ function buildSitemap(events) {
     })
     .join('');
 
+  // Explore layer (EXPLORE-LAYER-PLAN §7, D2): the hub + the OWNER-CURATED allowlist
+  // only — NOT every auto-generated place/facet (that would risk flooding Google with
+  // thin pages). The public /events/explore-slugs read already returns only promoted
+  // paths that currently resolve, each below /explore (e.g. 'singapore/wine-tastings').
+  const exploreHubEntry =
+    `<url><loc>${exploreCanonicalUrl()}</loc><changefreq>daily</changefreq></url>`;
+  const exploreEntries = (exploreSlugs || [])
+    .filter((s) => s.path)
+    .map((s) => `<url><loc>${CANONICAL_BASE_EXPLORE}/${s.path}</loc><changefreq>weekly</changefreq></url>`)
+    .join('');
+
   return (
     '<?xml version="1.0" encoding="UTF-8"?>' +
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' +
     listingEntry +
+    exploreHubEntry +
+    exploreEntries +
     eventEntries +
     '</urlset>'
   );
 }
 
+// The apex '/a/events/explore' prefix a promoted allowlist path (below /explore) hangs
+// off — exploreCanonicalUrl() with no args, reused for every promoted row.
+const CANONICAL_BASE_EXPLORE = exploreCanonicalUrl();
+
 export async function getServerSideProps({ res }) {
   let events = [];
+  let exploreSlugs = [];
   try {
     // when=all so past-dated published events (which stay indexable) are included.
-    events = await eventsService.getListing({ when: 'all', limit: 100 });
+    // Explore slugs read in parallel; the public endpoint returns only resolving paths.
+    [events, exploreSlugs] = await Promise.all([
+      eventsService.getListing({ when: 'all', limit: 100 }),
+      eventsService.getExploreSlugs(),
+    ]);
   } catch {
     events = [];
+    exploreSlugs = [];
   }
 
   res.setHeader('Content-Type', 'application/xml');
   res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate');
-  res.write(buildSitemap(events));
+  res.write(buildSitemap(events, exploreSlugs));
   res.end();
 
   return { props: {} };
