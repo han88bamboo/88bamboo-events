@@ -35,6 +35,6 @@ admin_session_secret  = "CHANGE_ME_long_random_string"  # openssl rand -hex 32
 
 # --- Non-secret app config (defaults are production-ready) -------------------
 # public_event_base_url = "https://www.88bamboo.co/a/events"
-# ses_sender            = "events@88bamboo.co"
+# ses_sender            = "Events - 88 Bamboo <events@88bamboo.co>"
 # admin_notify_email    = "events@88bamboo.co"
 # enable_ses            = true

@@ -215,7 +215,7 @@ variable "public_event_base_url" {
 variable "ses_sender" {
   description = "From-address for transactional email."
   type        = string
-  default     = "events@88bamboo.co"
+  default     = "Events - 88 Bamboo <events@88bamboo.co>"
 }
 
 variable "admin_notify_email" {
