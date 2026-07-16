@@ -208,7 +208,11 @@ function descriptionFromEditor(node) {
 // the caret to the start. Paste is forced to plain text to keep out stray markup.
 function PlainTextParagraphEditor({ id, labelledBy, value, onChange }) {
   const editorRef = useRef(null);
-  const initialHtmlRef = useRef(descriptionToEditorHtml(value));
+  // The {__html} object must keep the SAME identity across renders: React 19
+  // re-applies dangerouslySetInnerHTML whenever the object identity changes
+  // (it no longer diffs the __html string), which would wipe the DOM back to
+  // this initial HTML on every keystroke and collapse the caret to the start.
+  const initialHtmlRef = useRef({ __html: descriptionToEditorHtml(value) });
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -242,7 +246,7 @@ function PlainTextParagraphEditor({ id, labelledBy, value, onChange }) {
       suppressContentEditableWarning
       onInput={(e) => emitChange(e.currentTarget)}
       onPaste={pastePlainText}
-      dangerouslySetInnerHTML={{ __html: initialHtmlRef.current }}
+      dangerouslySetInnerHTML={initialHtmlRef.current}
     />
   );
 }
