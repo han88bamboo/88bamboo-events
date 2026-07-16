@@ -102,7 +102,7 @@ function PayForm({ held, token, onPaid }) {
       <div className="mb-3">
         <label className="form-label">Card details</label>
         <div className="form-control" style={{ padding: '0.6rem 0.75rem' }}>
-          <CardElement options={{ hidePostalCode: false }} />
+          <CardElement options={{ hidePostalCode: true }} />
         </div>
         <div className="form-text">
           Test card: 4242 4242 4242 4242, any future date, any CVC.
