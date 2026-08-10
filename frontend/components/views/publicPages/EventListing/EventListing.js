@@ -330,8 +330,8 @@ function EventListing({ initialEvents = [], taxonomy, countries = [], initialFil
           Find, Attend &amp; Publish Events or Promotions
         </h1>
         <div className="d-flex gap-2">
-          <Link href="/submit" className="btn bamboo-btn">
-            List an event
+          <Link href="/submit" className="btn bamboo-btn bamboo-btn--cta">
+            Publish an event
           </Link>
           <Link href="/account" className="btn bamboo-btn bamboo-btn--secondary">
             Manage your listings

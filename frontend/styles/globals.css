@@ -29,6 +29,8 @@
   --bamboo-green-h6: #03652a;
   --bamboo-button-text: #f2f0e3;  /* cream */
   --bamboo-yellow: #fcc200;       /* reviews bar */
+  --bamboo-red: #f3021e;          /* "publish an event" CTA bg */
+  --bamboo-red-hi: #c40218;       /* ~20% darker — CTA hover */
   --bamboo-border: #e8e9eb;
   --bamboo-border-form: #949494;
   --bamboo-footer-bg: #f5f5f5;
@@ -42,6 +44,7 @@
   --page-width: 1200px;
   --article-measure: 760px;
   --radius: 2px;
+  --radius-btn: 8px;              /* buttons only — cards/forms keep --radius */
 }
 
 /* ---- Base ---- */
@@ -207,7 +210,7 @@ a:focus {
   cursor: pointer;
   padding: 8px 15px;
   border: 1px solid transparent;
-  border-radius: var(--radius);
+  border-radius: var(--radius-btn);
   background-color: var(--bamboo-green);
   color: var(--bamboo-button-text);
   transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
@@ -239,6 +242,20 @@ a:focus {
   background-color: var(--bamboo-green);
   color: var(--bamboo-button-text);
   border-color: var(--bamboo-green);
+}
+
+/* CTA: the "publish an event" call to action — red bg, white text. Deliberately
+   off-palette so the paid-listing entry point stands out from the green CTAs. */
+.bamboo-btn--cta {
+  background-color: var(--bamboo-red);
+  color: #fff;
+  border-color: var(--bamboo-red);
+}
+.bamboo-btn--cta:hover,
+.bamboo-btn--cta:focus {
+  background-color: var(--bamboo-red-hi);
+  color: #fff;
+  border-color: var(--bamboo-red-hi);
 }
 
 /* Tertiary: transparent bg, slate text + border (card "Read more"). */

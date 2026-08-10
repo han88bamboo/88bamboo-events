@@ -14,7 +14,7 @@ import { FOOTER_LINKS, SOCIAL_LINKS, STORE_ORIGIN, storeUrl } from '../menuData'
 // Events-app-native quick links (relative — resolved under basePath by next/link).
 const EVENTS_LINKS = [
   { label: 'Browse events', href: '/' },
-  { label: 'List an event', href: '/submit' },
+  { label: 'Publish an event', href: '/submit' },
   { label: 'Manage your listing', href: '/account' },
 ];
 

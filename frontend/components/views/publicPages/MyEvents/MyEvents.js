@@ -112,7 +112,7 @@ function MyEvents({ token, email, events = [] }) {
         <h1 className="tw-text-bamboo-slate mb-0" style={{ fontFamily: 'Buenard, Georgia, "Times New Roman", serif' }}>
           Your listings
         </h1>
-        <Link href="/submit" className="btn bamboo-btn">List a new event</Link>
+        <Link href="/submit" className="btn bamboo-btn bamboo-btn--cta">Publish a new event</Link>
       </div>
       <p className="text-muted">Signed in as {email}. Click a listing to manage it.</p>
 
@@ -129,7 +129,7 @@ function MyEvents({ token, email, events = [] }) {
       {events.length === 0 ? (
         <div className="alert alert-light border text-center py-5">
           You have no listings under this email yet.{' '}
-          <Link href="/submit">List an event</Link>.
+          <Link href="/submit">Publish an event</Link>.
         </div>
       ) : view === 'grid' ? (
         <div className="row">

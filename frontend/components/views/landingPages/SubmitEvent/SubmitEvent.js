@@ -604,7 +604,7 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
   return (
     <main className="container py-5" style={{ maxWidth: 720 }}>
       <h1 className="tw-text-bamboo-slate mb-1" style={{ fontFamily: 'Buenard, Georgia, "Times New Roman", serif' }}>
-        List an event
+        Publish an event
       </h1>
       <p className="text-muted">
         Submit your event. Listings go live after review;
@@ -614,7 +614,7 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
       {prefill && (
         <div className="alert alert-info" role="status">
           We&apos;ve pre-filled the details from your previous listing. Re-upload the
-          event image and submit to list it again — a fresh listing fee applies.
+          event image and submit to publish it again — a fresh listing fee applies.
         </div>
       )}
 

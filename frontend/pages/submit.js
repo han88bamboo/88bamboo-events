@@ -77,7 +77,7 @@ function SubmitPage(props) {
   return (
     <>
       <Head>
-        <title>List an event — 88 Bamboo Events</title>
+        <title>Publish an event — 88 Bamboo Events</title>
         <meta
           name="description"
           content="Submit a drinks or hospitality event to the 88 Bamboo events board."

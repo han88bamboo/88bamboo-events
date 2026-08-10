@@ -268,7 +268,7 @@ def send_submit_login_link(recipient, submit_url):
     an event" page already logged in (/submit?token=…) so they can set a public
     organiser name. Same cookie-free URL-token shape + 24-hour expiry as the
     account link; only the destination differs (F-D1)."""
-    subject = "Your login link to list an event on 88 Bamboo"
+    subject = "Your login link to publish an event on 88 Bamboo"
     body = (
         f"Hi,\n\n"
         f"You (or someone using your email) asked to log in while listing an event "
