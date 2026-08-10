@@ -608,7 +608,7 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
       </h1>
       <p className="text-muted">
         Submit your event. Listings go live after review;
-        the USD 5 fee is only charged if your listing is approved.
+        A USD 5 processing fee is only charged if your listing is approved.
       </p>
 
       {prefill && (

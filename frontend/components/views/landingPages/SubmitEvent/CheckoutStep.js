@@ -130,7 +130,7 @@ function CheckoutStep({ held, token, onPaid, onBack }) {
       <p className="text-muted">
         Your details and image are saved. To finish, we place a temporary
         authorisation (a hold, not a charge) on your card. You are only charged
-        the listing fee if your event is approved.
+        the processing fee if your event is approved.
       </p>
       <Elements stripe={stripePromise}>
         <PayForm held={held} token={token} onPaid={onPaid} />
