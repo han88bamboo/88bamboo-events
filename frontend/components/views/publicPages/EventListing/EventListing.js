@@ -327,7 +327,7 @@ function EventListing({ initialEvents = [], taxonomy, countries = [], initialFil
     <main className="page-width py-5">
       <div className="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
         <h1 className="mb-0">
-          Find, Attend &amp; List Events or Promotions
+          Find, Attend &amp; Publish Events or Promotions
         </h1>
         <div className="d-flex gap-2">
           <Link href="/submit" className="btn bamboo-btn">
