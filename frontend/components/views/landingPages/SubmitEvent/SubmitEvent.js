@@ -569,7 +569,7 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
     return (
       <main className="container py-5" style={{ maxWidth: 720 }}>
         <h1 className="tw-text-bamboo-slate mb-3" style={{ fontFamily: 'Buenard, Georgia, "Times New Roman", serif' }}>
-          Confirm &amp; pay
+          Confirm &amp; Pay Processing Fee... You're Almost There!
         </h1>
         {result.image?.url && (
           // Plain <img> (not next/image): the local stub host is not in the

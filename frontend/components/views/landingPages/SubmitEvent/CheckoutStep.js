@@ -127,11 +127,14 @@ function CheckoutStep({ held, token, onPaid, onBack }) {
 
   return (
     <div>
-      <p className="text-muted">
-        Your details and image are saved. To finish, we place a temporary
-        authorisation (a hold, not a charge) on your card. You are only charged
-        the processing fee if your event is approved.
+      <p className="text-muted"><br/>
+        Your details and image are saved. 
       </p>
+      <p className="text-muted">To finish, we place a temporary
+        authorisation (a hold, not a charge) on your card. <span style={{ color: 'red' }}>You are only charged
+        the processing fee if your event is approved in an email within 3 working days.</span></p>
+      <p className="text-muted"></p>
+      <p className="text-muted"></p>
       <Elements stripe={stripePromise}>
         <PayForm held={held} token={token} onPaid={onPaid} />
       </Elements>
