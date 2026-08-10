@@ -460,18 +460,19 @@ function EventListing({ initialEvents = [], taxonomy, countries = [], initialFil
       )}
 
       <p className="text-muted small mt-4">
-        Public listings live at{' '}
-        <code>{BASE_PATH}/&lt;event&gt;</code>. Organisers can update a listing via
-        the edit link emailed to them.
-      </p>
+        Organisers can update a listing via the edit link emailed to them.
+      </p>  {/* Public listings live at{' '}
+        <code>{BASE_PATH}/&lt;event&gt;</code>.  */}
 
       {/* Interlink to the Explore hub (EXPLORE-LAYER-PLAN §7) — gives the explore
           landing pages a crawl path from the main board. */}
       <p className="text-muted small">
-        Browse by city on the <Link href="/explore">Explore events hub</Link>.
+        Browse by city on the <Link href="/explore" className="text-decoration-underline" style={{ color: 'var(--bamboo-green-link)' }}>Explore events hub</Link>.
       </p>
     </main>
   );
 }
 
 export default EventListing;
+Public listings live at{' '}
+        <code>{BASE_PATH}/&lt;event&gt;</code>. 
