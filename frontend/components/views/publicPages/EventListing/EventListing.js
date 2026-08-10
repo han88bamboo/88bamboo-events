@@ -473,6 +473,4 @@ function EventListing({ initialEvents = [], taxonomy, countries = [], initialFil
   );
 }
 
-export default EventListing;
-Public listings live at{' '}
-        <code>{BASE_PATH}/&lt;event&gt;</code>. 
+export default EventListing; 
