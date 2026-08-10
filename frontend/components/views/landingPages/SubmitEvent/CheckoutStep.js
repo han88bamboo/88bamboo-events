@@ -32,7 +32,7 @@ function newIdempotencyKey() {
   return `k_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
-function PayForm({ held, token, onPaid }) {
+function PayForm({ held, token, feeLabel, onPaid }) {
   const stripe = useStripe();
   const elements = useElements();
   const [error, setError] = useState(null);
@@ -109,13 +109,15 @@ function PayForm({ held, token, onPaid }) {
         </div>
       </div>
       <button type="submit" className="btn bamboo-btn" disabled={!stripe || busy}>
-        {busy ? 'Authorising…' : 'Place a temporary hold & submit'}
+        {busy
+          ? 'Authorising…'
+          : `Place a temporary ${feeLabel ? `${feeLabel} ` : ''}hold & submit`}
       </button>
     </form>
   );
 }
 
-function CheckoutStep({ held, token, onPaid, onBack }) {
+function CheckoutStep({ held, token, feeLabel, onPaid, onBack }) {
   if (!stripePromise) {
     return (
       <div className="alert alert-warning" role="alert">
@@ -131,7 +133,8 @@ function CheckoutStep({ held, token, onPaid, onBack }) {
         Your details and image are saved. 
       </p>
       <p className="text-muted">To finish, we place a temporary
-        authorisation (a hold, not a charge) on your card. <span style={{ color: 'red' }}>You are only charged
+        authorisation of {feeLabel ? <strong>{feeLabel}</strong> : 'the processing fee'} (a
+        hold, not a charge) on your card. <span style={{ color: 'red' }}>You are only charged
         the processing fee if your event is approved in an email within 3 working days.</span></p>
       <p className="text-muted"></p>
       <p className="text-muted"></p>

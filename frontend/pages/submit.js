@@ -20,7 +20,7 @@ export async function getServerSideProps(ctx) {
   // must not render an empty form (the SubmitEvent view also self-heals client-
   // side, but retrying here keeps the first paint correct). An empty result is
   // treated as a miss worth retrying.
-  let taxonomy = { drink_categories: [], event_formats: [] };
+  let taxonomy = { drink_categories: [], event_formats: [], pricing: null };
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const t = await submissionsService.getTaxonomy();

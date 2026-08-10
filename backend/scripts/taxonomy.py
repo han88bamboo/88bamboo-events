@@ -1,9 +1,16 @@
-# scripts/taxonomy.py — read-only taxonomy for the submission form's two selects
-# (plan §7: options come from the DB tables, never hardcoded). Prefix /taxonomy.
+# scripts/taxonomy.py — read-only reference data for the submission form (plan §7:
+# options come from the DB tables, never hardcoded). Prefix /taxonomy.
 #
-# GET /taxonomy -> { code, data: { drink_categories: [...], event_formats: [...] } }
+# GET /taxonomy -> { code, data: { drink_categories: [...], event_formats: [...],
+#                                  pricing: {price, currency} | null } }
 # Each list item is {id, label}. Only ACTIVE rows are returned so the owner can
 # retire an option without code changes.
+#
+# `pricing` is the PUBLIC read of the active pricing tier — the same row
+# /submissions/create-intent prices the PaymentIntent from — so the submit and
+# checkout pages can quote the real fee instead of a hardcoded number that drifts
+# whenever the owner edits the tier. Read-only and non-secret: label and the admin
+# CRUD stay behind /admin/pricing-tiers.
 
 import os
 
@@ -28,6 +35,14 @@ def get_taxonomy():
                 "SELECT id, label FROM event_formats WHERE active = TRUE ORDER BY id"
             )
             event_formats = cursor.fetchall()
+            # Same read as submissions.py `_active_pricing_tier()` — single-active
+            # invariant enforced by the admin CRUD, so this resolves to the tier
+            # the card will actually be authorised for. None if none is configured.
+            cursor.execute(
+                "SELECT price, currency FROM pricing_tiers "
+                "WHERE active = TRUE ORDER BY id LIMIT 1"
+            )
+            tier = cursor.fetchone()
         return (
             jsonify(
                 {
@@ -35,6 +50,11 @@ def get_taxonomy():
                     "data": {
                         "drink_categories": drink_categories,
                         "event_formats": event_formats,
+                        "pricing": (
+                            {"price": tier["price"], "currency": tier["currency"]}
+                            if tier
+                            else None
+                        ),
                     },
                 }
             ),

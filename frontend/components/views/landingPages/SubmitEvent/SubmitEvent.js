@@ -36,6 +36,15 @@ const MAX_IMAGE_MB = 5;
 // beyond the required Feature Image, shown in the detail-page carousel.
 const MAX_ADDITIONAL_IMAGES = 5;
 
+// Render the active pricing tier as "USD 15" / "USD 15.50" (Flask serialises the
+// NUMERIC price as a string). Returns null when no tier is available, so callers
+// fall back to copy that names no figure at all.
+function formatFee(pricing) {
+  const num = Number(pricing?.price);
+  if (!pricing || pricing.price == null || Number.isNaN(num)) return null;
+  return `${pricing.currency || 'USD'} ${Number.isInteger(num) ? num : num.toFixed(2)}`;
+}
+
 // Wizard steps (data-entry only — payment stays on the post-3a screen). Each
 // entry lists the field keys validated to gate "Next"/reveal inline errors; the
 // location step also folds in LocationFields' own reported errors.
@@ -264,6 +273,11 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
   const [tax, setTax] = useState(taxonomy);
   const drinkCategories = tax?.drink_categories || [];
   const eventFormats = tax?.event_formats || [];
+  // The live processing fee, from the active pricing tier the backend prices the
+  // PaymentIntent from — never a hardcoded number, which silently drifts when the
+  // owner edits the tier. null (no tier / API blip) renders fee-free copy rather
+  // than a possibly-wrong figure.
+  const feeLabel = formatFee(tax?.pricing);
 
   useEffect(() => {
     if (eventFormats.length || drinkCategories.length) return undefined;
@@ -594,6 +608,7 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
         <CheckoutStep
           held={result}
           token={authToken}
+          feeLabel={feeLabel}
           onPaid={(data) => setConfirmation(data)}
           onBack={() => setResult(null)}
         />
@@ -608,7 +623,8 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
       </h1>
       <p className="text-muted">
         Submit your event. Listings go live after review;
-        A USD 5 processing fee is only charged if your listing is approved.
+        {feeLabel ? ` A ${feeLabel} processing fee` : ' A processing fee'} is only
+        charged if your listing is approved.
       </p>
 
       {prefill && (

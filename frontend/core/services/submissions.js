@@ -1,7 +1,10 @@
 // core/services/submissions.js — submission-flow service module (PATTERN-SPEC
 // §B2.3). Pages/components import this, never `apiClient` directly.
 //
-//   getTaxonomy() -> { drink_categories: [{id,label}], event_formats: [{id,label}] }
+//   getTaxonomy() -> { drink_categories: [{id,label}], event_formats: [{id,label}],
+//                      pricing: {price, currency} | null }
+// `pricing` is the active pricing tier — the fee the card is actually authorised
+// for — so the submit/checkout copy quotes the live number, not a hardcoded one.
 //   submit(formData) -> { data, ok, status } from apiClient.post
 //
 // `submit` takes a FormData (it carries the image file), which apiClient.post
@@ -12,7 +15,8 @@ export const submissionsService = {
   async getTaxonomy() {
     const response = await apiClient.get('/taxonomy');
     return (
-      response.data?.data || { drink_categories: [], event_formats: [] }
+      response.data?.data
+      || { drink_categories: [], event_formats: [], pricing: null }
     );
   },
 
