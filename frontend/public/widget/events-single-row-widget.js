@@ -89,17 +89,20 @@
       '.besrw-fmt{background:#EAF2EC;color:#0B4321}' +
       '.besrw-cat{background:#F6F1E8;color:#5f4524}' +
       '.besrw-empty{color:#666;padding:20px 0}' +
-      // The CTA mirrors the storefront's red "publish an event" button
-      // (.bamboo-btn.bamboo-btn--cta in frontend/styles/globals.css) at its
-      // --small size. Values are inlined literally, not as CSS variables: this
-      // script runs inside the Shopify theme, where globals.css is not loaded.
+      // The CTA takes its size and red from the storefront's "publish an event"
+      // button (.bamboo-btn.bamboo-btn--cta in frontend/styles/globals.css) at
+      // its --small size, but deliberately diverges on three points: a bold
+      // system font stack rather than the brand serif, and a hover that inverts
+      // to white-on-red instead of darkening. Values are inlined literally, not
+      // as CSS variables: this script runs inside the Shopify theme, where
+      // globals.css is not loaded.
       '.besrw-more{display:inline-block;margin-top:16px;padding:8px 10px;' +
-      'font-family:"Buenard",Georgia,"Times New Roman",serif;font-weight:400;' +
-      'font-size:12px;line-height:1;text-transform:uppercase;letter-spacing:.08em;' +
+      'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;' +
+      'font-weight:700;font-size:12px;line-height:1;text-transform:uppercase;letter-spacing:.08em;' +
       'text-align:center;text-decoration:none;cursor:pointer;' +
       'border:1px solid #F3021E;border-radius:8px;background-color:#F3021E;color:#fff;' +
-      'transition:background-color .2s ease,border-color .2s ease}' +
-      '.besrw-more:hover,.besrw-more:focus{background-color:#C40218;border-color:#C40218;color:#fff}';
+      'transition:background-color .2s ease,border-color .2s ease,color .2s ease}' +
+      '.besrw-more:hover,.besrw-more:focus{background-color:#fff;border-color:#F3021E;color:#F3021E}';
     document.head.appendChild(h('style', { id: STYLE_ID }, [css]));
   }
 
