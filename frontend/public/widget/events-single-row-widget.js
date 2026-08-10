@@ -68,8 +68,9 @@
     return Array.isArray(ev.drink_categories) ? ev.drink_categories.filter(Boolean) : [];
   }
 
-  // These values intentionally mirror events-widget.js so the two card
-  // widgets remain visually interchangeable.
+  // The card values intentionally mirror events-widget.js so the two card
+  // widgets remain visually interchangeable. The trailing CTA (.besrw-more) is
+  // a deliberate exception — see the note on that rule.
   function injectStyles() {
     if (document.getElementById(STYLE_ID)) return;
     var css =
@@ -88,7 +89,17 @@
       '.besrw-fmt{background:#EAF2EC;color:#0B4321}' +
       '.besrw-cat{background:#F6F1E8;color:#5f4524}' +
       '.besrw-empty{color:#666;padding:20px 0}' +
-      '.besrw-more{display:inline-block;margin-top:16px;color:#0B4321;font-weight:600;text-decoration:none}';
+      // The CTA mirrors the storefront's red "publish an event" button
+      // (.bamboo-btn.bamboo-btn--cta in frontend/styles/globals.css) at its
+      // --small size. Values are inlined literally, not as CSS variables: this
+      // script runs inside the Shopify theme, where globals.css is not loaded.
+      '.besrw-more{display:inline-block;margin-top:16px;padding:8px 10px;' +
+      'font-family:"Buenard",Georgia,"Times New Roman",serif;font-weight:400;' +
+      'font-size:12px;line-height:1;text-transform:uppercase;letter-spacing:.08em;' +
+      'text-align:center;text-decoration:none;cursor:pointer;' +
+      'border:1px solid #F3021E;border-radius:8px;background-color:#F3021E;color:#fff;' +
+      'transition:background-color .2s ease,border-color .2s ease}' +
+      '.besrw-more:hover,.besrw-more:focus{background-color:#C40218;border-color:#C40218;color:#fff}';
     document.head.appendChild(h('style', { id: STYLE_ID }, [css]));
   }
 
@@ -183,7 +194,9 @@
 
     wrap.appendChild(grid);
     wrap.appendChild(
-      h('a', { class: 'besrw-more', href: opts.site + BASE_PATH, target: '_top' }, ['See all events →'])
+      h('a', { class: 'besrw-more', href: opts.site + BASE_PATH + '/submit', target: '_top' }, [
+        'Publish an event',
+      ])
     );
     mount.appendChild(wrap);
     draw(true);
