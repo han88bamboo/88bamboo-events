@@ -695,8 +695,8 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
             <div className="border rounded p-3 mb-4 bg-light">
               {loginSent ? (
                 <p className="small mb-0">
-                  Check your email for a login link. Open the link to sign in and submit your event there.
-                  You can leave this page now. 
+                  <strong>Check your email for a login link.</strong> Open the link to sign in and submit your event there.
+                  <strong>You can leave this page now.</strong> 
                 </p>
               ) : !showLogin ? (
                 <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
