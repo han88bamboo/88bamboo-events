@@ -99,14 +99,14 @@ function PayForm({ held, token, feeLabel, onPaid }) {
           {error}
         </div>
       )}
-      <div className="mb-3">
+      <div className="mb-3 mt-3">
         <label className="form-label">Card details</label>
         <div className="form-control" style={{ padding: '0.6rem 0.75rem' }}>
           <CardElement options={{ hidePostalCode: true }} />
         </div>
-        <div className="form-text">
+        {/* <div className="form-text">
           Test card: 4242 4242 4242 4242, any future date, any CVC.
-        </div>
+        </div> */}
       </div>
       <button type="submit" className="btn bamboo-btn" disabled={!stripe || busy}>
         {busy
@@ -130,9 +130,9 @@ function CheckoutStep({ held, token, feeLabel, onPaid, onBack }) {
   return (
     <div>
       <p className="text-muted"><br/>
-        Your details and image are saved. 
+        Your details and image are saved! 
       </p>
-      <p className="text-muted">To finish, we place a temporary
+      <p className="text-muted mt-3">To finish, we place a temporary
         authorisation of {feeLabel ? <strong>{feeLabel}</strong> : 'the processing fee'} (a
         hold, not a charge) on your card. <span style={{ color: 'red' }}>You are only charged
         the processing fee if your event is approved in an email within 3 working days.</span></p>

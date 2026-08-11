@@ -595,7 +595,7 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
             style={{ maxHeight: 200 }}
           />
         )}
-        <h5 className="mb-1">{result.event?.name}</h5>
+        <h3 className="mb-1">{result.event?.name}</h3>
         <p className="text-muted">
           {result.event?.city}, {result.event?.country}
         </p>
