@@ -210,7 +210,7 @@ function ScheduleFields({ values, onChange, onValidationChange }) {
         <div className="row g-2 align-items-end mb-2" key={i}>
           <div className="col-12 col-sm-5">
             <label className="form-label small mb-1" htmlFor={`occ-date-${i}`}>
-              Date {i + 1}
+              Date {i + 1} <span className="text-danger">*</span>
             </label>
             <input
               id={`occ-date-${i}`}
@@ -222,7 +222,7 @@ function ScheduleFields({ values, onChange, onValidationChange }) {
           </div>
           <div className="col-5 col-sm-3">
             <label className="form-label small mb-1" htmlFor={`occ-start-${i}`}>
-              Start
+              Start <span className="text-danger">*</span>
             </label>
             <input
               id={`occ-start-${i}`}
@@ -234,7 +234,7 @@ function ScheduleFields({ values, onChange, onValidationChange }) {
           </div>
           <div className="col-5 col-sm-3">
             <label className="form-label small mb-1" htmlFor={`occ-end-${i}`}>
-              End
+              End <span className="text-danger">*</span>
             </label>
             <input
               id={`occ-end-${i}`}

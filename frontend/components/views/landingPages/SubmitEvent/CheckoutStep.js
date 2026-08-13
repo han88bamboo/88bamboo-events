@@ -100,7 +100,9 @@ function PayForm({ held, token, feeLabel, onPaid }) {
         </div>
       )}
       <div className="mb-3 mt-3">
-        <label className="form-label">Card details</label>
+        <label className="form-label">
+          Card details <span className="text-danger">*</span>
+        </label>
         <div className="form-control" style={{ padding: '0.6rem 0.75rem' }}>
           <CardElement options={{ hidePostalCode: true }} />
         </div>
