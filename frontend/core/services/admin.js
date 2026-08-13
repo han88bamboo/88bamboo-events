@@ -5,6 +5,8 @@
 //   getPending(token)                -> { data } (the review queue)
 //   approve(token, versionId)        -> { data, ok, status }
 //   reject(token, versionId, reason) -> { data, ok, status }
+//   approveWaived(token, versionId)  -> { data, ok, status } (publish, no charge)
+//   getExpired(token)                -> { data } (lapsed holds, rescuable)
 //
 // The guarded calls send the session token as `Authorization: Bearer <token>` —
 // a header rather than a cookie because the API is a different origin from the
@@ -36,6 +38,21 @@ export const adminService = {
       { version_id: versionId, reason },
       { headers: authHeader(token) },
     );
+  },
+
+  // WV-1: publish without charging — the backend releases any hold instead of
+  // capturing it. Also the only way to publish an expired submission (below),
+  // whose hold is already gone.
+  async approveWaived(token, versionId) {
+    return apiClient.post(
+      '/admin/approve-waived',
+      { version_id: versionId },
+      { headers: authHeader(token) },
+    );
+  },
+
+  async getExpired(token) {
+    return apiClient.get('/admin/expired', { headers: authHeader(token) });
   },
 
   // --- Phase 4B: live-listing management, versions, analytics, pricing ---

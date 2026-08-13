@@ -185,8 +185,12 @@ CREATE TABLE payments (
     payment_intent_id VARCHAR(255),
     amount            NUMERIC(10, 2) NOT NULL,           -- major currency units (matches pricing_tiers.price)
     currency          VARCHAR(3) NOT NULL DEFAULT 'USD',
+    -- 'waived' (WV-1): the admin published the listing WITHOUT charging — any live
+    -- hold was cancelled at Stripe. Distinct from 'cancelled' (rejected) and
+    -- 'auto_released' (expired) so a comped listing stays reportable; `amount`
+    -- keeps the tier price so the given-away value is still visible.
     status            VARCHAR(50) NOT NULL DEFAULT 'authorised'
-                      CHECK (status IN ('authorised', 'captured', 'cancelled', 'auto_released')),
+                      CHECK (status IN ('authorised', 'captured', 'cancelled', 'auto_released', 'waived')),
     capture_before    TIMESTAMPTZ,                       -- Stripe's authorisation expiry; drives the hourly auto-release job
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     captured_at       TIMESTAMPTZ

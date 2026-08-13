@@ -127,6 +127,10 @@ function Analytics() {
             <StatCard label="Captured" value={payments.captured_count ?? 0} />
             <StatCard label="Holds active" value={payments.held_count ?? 0} />
             <StatCard label="Auto-released" value={payments.auto_released_count ?? 0} />
+            {/* WV-1: listings published without charge. Kept out of the captured
+                revenue figure above; the value shown is what was given away. */}
+            <StatCard label="Waived" value={payments.waived_count ?? 0} />
+            <StatCard label="Waived value" value={formatFee(payments.waived_amount, 'USD')} />
           </div>
 
           <h5 className="text-muted mb-3">

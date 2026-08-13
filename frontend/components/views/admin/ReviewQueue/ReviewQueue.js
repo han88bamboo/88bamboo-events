@@ -30,9 +30,15 @@ function formatFee(amount, currency) {
   return `${currency || 'USD'} ${text}`;
 }
 
-function PendingCard({ item, onApprove, onReject, onEdit, onMessage, busy }) {
+function PendingCard({ item, onApprove, onReject, onWaive, onEdit, onMessage, busy }) {
   const [showReject, setShowReject] = useState(false);
+  const [confirmWaive, setConfirmWaive] = useState(false);
   const [reason, setReason] = useState('');
+  // WV-1 states the reviewer must see BEFORE clicking anything:
+  //   no payment row at all  -> nothing was ever held
+  //   already captured       -> the money is gone; waiving is refused server-side
+  const noPayment = !item.payment_status;
+  const alreadyCharged = item.payment_status === 'captured';
 
   return (
     <div className="card mb-4">
@@ -57,9 +63,20 @@ function PendingCard({ item, onApprove, onReject, onEdit, onMessage, busy }) {
           <div className="card-body">
             <div className="d-flex justify-content-between align-items-start">
               <h5 className="card-title mb-1">{item.name}</h5>
-              {item.is_duplicate && (
-                <span className="badge bg-warning text-dark">Possible duplicate</span>
-              )}
+              <div className="d-flex gap-2 flex-wrap justify-content-end">
+                {item.is_duplicate && (
+                  <span className="badge bg-warning text-dark">Possible duplicate</span>
+                )}
+                {/* WV-1: surface the payment state as a badge, not just buried in
+                    the detail list — the reviewer must know there is nothing to
+                    charge (or that it is already charged) before choosing. */}
+                {noPayment && (
+                  <span className="badge bg-warning text-dark">No payment attached</span>
+                )}
+                {alreadyCharged && (
+                  <span className="badge bg-success">Fee already charged</span>
+                )}
+              </div>
             </div>
 
             <p className="text-muted mb-2">
@@ -131,8 +148,14 @@ function PendingCard({ item, onApprove, onReject, onEdit, onMessage, busy }) {
 
               <dt className="col-sm-3">Fee held</dt>
               <dd className="col-sm-9">
-                {formatFee(item.amount, item.currency)}{' '}
-                <span className="text-muted">({item.payment_status || 'unknown'})</span>
+                {noPayment ? (
+                  <span className="text-warning-emphasis">None — no payment attached</span>
+                ) : (
+                  <>
+                    {formatFee(item.amount, item.currency)}{' '}
+                    <span className="text-muted">({item.payment_status})</span>
+                  </>
+                )}
               </dd>
 
               <dt className="col-sm-3">Capture by</dt>
@@ -147,15 +170,31 @@ function PendingCard({ item, onApprove, onReject, onEdit, onMessage, busy }) {
               <p className="card-text small text-muted">{item.description}</p>
             )}
 
-            {!showReject ? (
-              <div className="d-flex gap-2 mt-3">
+            {showReject || confirmWaive ? null : (
+              <div className="d-flex gap-2 mt-3 flex-wrap">
                 <button
                   type="button"
                   className="btn bamboo-btn btn-sm"
-                  disabled={busy}
+                  disabled={busy || noPayment}
+                  // Nothing is held, so there is nothing to capture — approve()
+                  // would 409. Waiving is the only way to publish these.
+                  title={noPayment ? 'No payment is attached — use Approve without charging.' : undefined}
                   onClick={() => onApprove(item)}
                 >
                   Approve &amp; charge
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline-success btn-sm"
+                  disabled={busy || alreadyCharged}
+                  title={
+                    alreadyCharged
+                      ? 'The fee was already charged — refund it in Stripe instead.'
+                      : undefined
+                  }
+                  onClick={() => setConfirmWaive(true)}
+                >
+                  Approve without charging
                 </button>
                 <button
                   type="button"
@@ -182,7 +221,41 @@ function PendingCard({ item, onApprove, onReject, onEdit, onMessage, busy }) {
                   Message
                 </button>
               </div>
-            ) : (
+            )}
+
+            {/* Waive confirmation (E2). Irreversible: once the hold is cancelled
+                the card cannot be charged again without a fresh submission. */}
+            {confirmWaive && (
+              <div className="mt-3 border rounded p-3 bg-light">
+                <p className="small mb-2">
+                  Publish <strong>{item.name}</strong> without charging?{' '}
+                  {noPayment
+                    ? 'No payment is attached, so nothing is released.'
+                    : `The ${formatFee(item.amount, item.currency)} hold will be released and the card will not be charged.`}{' '}
+                  This cannot be undone — charging later would need a fresh submission.
+                </p>
+                <div className="d-flex gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-success btn-sm"
+                    disabled={busy}
+                    onClick={() => onWaive(item)}
+                  >
+                    Confirm — publish free
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-link btn-sm text-muted"
+                    disabled={busy}
+                    onClick={() => setConfirmWaive(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {showReject && (
               <div className="mt-3">
                 <label className="form-label small" htmlFor={`reason-${item.version_id}`}>
                   Reason (emailed to the submitter)
@@ -222,9 +295,66 @@ function PendingCard({ item, onApprove, onReject, onEdit, onMessage, busy }) {
   );
 }
 
+// ExpiredRow (WV-1) — a submission the hourly job auto-released. There is no hold
+// left, so the ONLY action is publishing it free; a compact row rather than a full
+// PendingCard because this is an exception list, not the daily triage surface.
+function ExpiredRow({ item, onWaive, busy }) {
+  const [confirm, setConfirm] = useState(false);
+
+  return (
+    <div className="border rounded p-3 mb-2">
+      <div className="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+        <div>
+          <div className="fw-semibold">{item.name}</div>
+          <div className="small text-muted">
+            {formatDateTime(item.start_datetime)} · {item.city}, {item.country}
+          </div>
+          <div className="small text-muted">
+            {item.submitter_email} · hold released {formatDateTime(item.reviewed_at)} (
+            {formatFee(item.amount, item.currency)} never charged)
+          </div>
+        </div>
+        {!confirm ? (
+          <button
+            type="button"
+            className="btn btn-outline-success btn-sm"
+            disabled={busy}
+            onClick={() => setConfirm(true)}
+          >
+            Publish without charging
+          </button>
+        ) : (
+          <div className="d-flex gap-2 align-items-center">
+            <span className="small text-muted">Publish free?</span>
+            <button
+              type="button"
+              className="btn btn-success btn-sm"
+              disabled={busy}
+              onClick={() => onWaive(item)}
+            >
+              Confirm
+            </button>
+            <button
+              type="button"
+              className="btn btn-link btn-sm text-muted"
+              disabled={busy}
+              onClick={() => setConfirm(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ReviewQueue() {
   const router = useRouter();
   const [items, setItems] = useState([]);
+  // WV-1: expired submissions live below the queue on this same tab. They are
+  // invisible everywhere else in the admin app once the job marks them.
+  const [expired, setExpired] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
@@ -259,6 +389,14 @@ function ReviewQueue() {
       return;
     }
     setItems(data.data || []);
+    // The expired list is secondary — a failure here must not blank the queue,
+    // so it is fetched separately and simply left empty if it fails.
+    try {
+      const { data: exp } = await adminService.getExpired(token);
+      setExpired(exp?.code === 200 ? exp.data || [] : []);
+    } catch {
+      setExpired([]);
+    }
     setLoading(false);
   }, [router]);
 
@@ -299,6 +437,30 @@ function ReviewQueue() {
     setNotice(`Rejected “${item.name}” — the authorisation hold was released.`);
   };
 
+  // WV-1: publish without charging. Serves both surfaces — a queue card (whose
+  // hold gets released) and an expired row (whose hold is already gone) — so it
+  // clears the item from whichever list it came from.
+  const onWaive = async (item) => {
+    setBusyId(item.version_id);
+    setNotice(null);
+    setError(null);
+    const token = adminAuth.getToken();
+    const { data, ok } = await adminService.approveWaived(token, item.version_id);
+    setBusyId(null);
+    if (!ok) {
+      setError(data?.error || 'Could not publish without charging.');
+      // 409 means the backend's state moved under us (a race with the hourly
+      // auto-release job, or a double-click) — resync rather than guess.
+      if (data?.code === 409) load();
+      return;
+    }
+    setItems((prev) => prev.filter((i) => i.version_id !== item.version_id));
+    setExpired((prev) => prev.filter((i) => i.version_id !== item.version_id));
+    setNotice(
+      `Published “${item.name}” at /${data.data.slug} — no charge was made and any hold was released.`,
+    );
+  };
+
   const onLogout = () => {
     adminAuth.logout();
     router.replace('/admin/login');
@@ -333,20 +495,45 @@ function ReviewQueue() {
 
       {loading ? (
         <p className="text-muted">Loading…</p>
-      ) : items.length === 0 ? (
-        <p className="text-muted">Nothing awaiting review. 🎉</p>
       ) : (
-        items.map((item) => (
-          <PendingCard
-            key={item.version_id}
-            item={item}
-            busy={busyId === item.version_id}
-            onApprove={onApprove}
-            onReject={onReject}
-            onEdit={setEditItem}
-            onMessage={setMsgItem}
-          />
-        ))
+        <>
+          {items.length === 0 ? (
+            <p className="text-muted">Nothing in queue.</p>
+          ) : (
+            items.map((item) => (
+              <PendingCard
+                key={item.version_id}
+                item={item}
+                busy={busyId === item.version_id}
+                onApprove={onApprove}
+                onReject={onReject}
+                onWaive={onWaive}
+                onEdit={setEditItem}
+                onMessage={setMsgItem}
+              />
+            ))
+          )}
+
+          {/* Expired (WV-1) — below the queue on the same tab. Rendered only when
+              there is something to rescue, so the daily view stays clean. */}
+          {expired.length > 0 && (
+            <section className="mt-5">
+              <h2 className="h5 tw-text-bamboo-slate mb-1">Expired</h2>
+              <p className="text-muted small mb-3">
+                The authorisation lapsed before review, so these were released and dropped
+                out of the queue. Nothing can be charged for them — publishing one is free.
+              </p>
+              {expired.map((item) => (
+                <ExpiredRow
+                  key={item.version_id}
+                  item={item}
+                  busy={busyId === item.version_id}
+                  onWaive={onWaive}
+                />
+              ))}
+            </section>
+          )}
+        </>
       )}
 
       {editItem && (

@@ -6,6 +6,9 @@
 #                         (edit-approval variant: repoint published_version_id +
 #                          keep the slug, no capture — plan §7)
 #   POST /admin/reject    cancel the hold  -> rejection email (reason)     [GUARDED]
+#   GET  /admin/expired   submissions whose hold lapsed unactioned (WV-1)  [GUARDED]
+#   POST /admin/approve-waived  publish WITHOUT charging: release the hold [GUARDED]
+#                         instead of capturing it (WV-1)
 #
 # THE CARVE-OUT (plan §5.3): approve/reject move money and change live listings,
 # so — unlike Drink-X's unguarded routes (§A6 ⚠️) — they verify the admin session
@@ -33,6 +36,7 @@ from magic_links import create_conversation_link
 from notifications import (
     send_admin_message,
     send_approved,
+    send_approved_waived,
     send_edit_approved,
     send_listing_updated,
     send_rejected,
@@ -473,6 +477,248 @@ def approve():
         ),
         200,
     )
+
+
+# ---------------------------------------------------------------------------
+# Approve WITHOUT charging (WV-1) — publish the listing but take no money.
+#
+# Stripe gives a manual-capture hold exactly three endings: capture, cancel, or
+# expire. There is no "publish but keep holding", so waiving = CANCEL the hold
+# (free release, same call reject() makes) and then run the normal publish.
+#
+# Two starting states are accepted:
+#   pending_review          — a live queue item; cancel whatever hold exists
+#   auto_rejected_expired   — a submission the hourly job already released and
+#                             dropped out of the queue; nothing left to cancel,
+#                             we just publish it (the "rescue" path, WV-1)
+#
+# Refused when the fee was already CAPTURED: the money is gone and cancelling a
+# captured intent is a no-op, so waiving would silently publish a charged
+# listing while claiming it was free. That needs a refund, not a waive.
+# ---------------------------------------------------------------------------
+_WAIVABLE_STATUSES = ("pending_review", "auto_rejected_expired")
+
+
+@blueprint.route("/approve-waived", methods=["POST"])
+@admin_required
+def approve_waived():
+    body = request.get_json(silent=True) or {}
+    version_id = body.get("version_id")
+    if not version_id:
+        return jsonify({"code": 400, "error": "version_id is required."}), 400
+
+    try:
+        with db_manager.get_cursor(commit=False) as cursor:
+            row = _load_version_for_action(cursor, version_id)
+    except psycopg2.Error:
+        return jsonify({"code": 500, "error": "Database error occurred"}), 500
+
+    if not row:
+        return jsonify({"code": 404, "error": "Submission not found."}), 404
+    if row["approval_status"] not in _WAIVABLE_STATUSES:
+        return jsonify({"code": 409, "error": f"Already {row['approval_status']}."}), 409
+    # An edit of an already-published listing is free anyway — approve() handles
+    # it with no capture, so waiving is meaningless here and the UI hides it.
+    if row["published_version_id"] is not None:
+        return (
+            jsonify(
+                {
+                    "code": 409,
+                    "error": "This is an edit of a live listing — edits are already "
+                    "free. Use Approve.",
+                }
+            ),
+            409,
+        )
+    if row["payment_status"] == "captured":
+        return (
+            jsonify(
+                {
+                    "code": 409,
+                    "error": "This fee was already charged. Refund it in the Stripe "
+                    "Dashboard instead of waiving.",
+                }
+            ),
+            409,
+        )
+
+    event = _row_to_event(row)
+
+    # Release the hold BEFORE publishing, exactly as reject() does. Best-effort:
+    # cancel_intent swallows Stripe errors, so an already-released/expired hold
+    # (the rescue path, where there is nothing left to cancel) can't block the
+    # publish. Only 'authorised' rows have anything live at Stripe.
+    if row["payment_intent_id"] and row["payment_status"] == "authorised":
+        cancel_intent(row["payment_intent_id"])
+
+    try:
+        with db_manager.get_cursor() as cursor:
+            # Re-read under a row lock and re-check: the hourly auto-release job
+            # locks the same payment row (scheduled_tasks.auto_release_expired),
+            # so without this a job firing mid-action could flip the version to
+            # auto_rejected_expired and email "resubmit" right after we publish.
+            locked = _lock_version_for_waive(cursor, version_id)
+            if not locked:
+                return jsonify({"code": 404, "error": "Submission not found."}), 404
+            if locked["approval_status"] not in _WAIVABLE_STATUSES:
+                # A concurrent approve/reject (or a double-click) beat us to it.
+                return (
+                    jsonify({"code": 409, "error": f"Already {locked['approval_status']}."}),
+                    409,
+                )
+            if locked["payment_status"] == "captured":
+                return (
+                    jsonify(
+                        {
+                            "code": 409,
+                            "error": "This fee was already charged. Refund it in the "
+                            "Stripe Dashboard instead of waiving.",
+                        }
+                    ),
+                    409,
+                )
+
+            if locked["payment_id"]:
+                cursor.execute(
+                    "UPDATE payments SET status = 'waived' WHERE id = %s",
+                    (locked["payment_id"],),
+                )
+
+            slug = generate_unique_slug(cursor, row["name"], row["city"])
+            cursor.execute(
+                "UPDATE events "
+                "SET published_version_id = %s, current_status = 'published', slug = %s "
+                "WHERE id = %s",
+                (version_id, slug, row["event_id"]),
+            )
+            cursor.execute(
+                "UPDATE event_versions "
+                "SET approval_status = 'approved', reviewed_at = now() "
+                "WHERE id = %s",
+                (version_id,),
+            )
+            _log_action(
+                cursor,
+                row["event_id"],
+                "approve_waived",
+                {
+                    "version_id": version_id,
+                    "slug": slug,
+                    "payment_intent_id": row["payment_intent_id"],
+                    "waived_amount": float(row["amount"]) if row["amount"] is not None else None,
+                    "currency": row["currency"],
+                    # True when rescued from the Expired section rather than the queue.
+                    "rescued_expired": row["approval_status"] == "auto_rejected_expired",
+                },
+            )
+    except psycopg2.Error:
+        return (
+            jsonify(
+                {
+                    "code": 500,
+                    "error": "Could not publish the listing. The card was NOT charged. "
+                    "Please retry.",
+                }
+            ),
+            500,
+        )
+
+    public_url = f"{_PUBLIC_EVENT_BASE_URL}/{slug}"
+    send_approved_waived(row["submitter_email"], event, public_url)
+
+    return (
+        jsonify(
+            {
+                "code": 200,
+                "data": {
+                    "event_id": row["event_id"],
+                    "version_id": version_id,
+                    "status": "published",
+                    "slug": slug,
+                    "public_url": public_url,
+                    "waived": True,
+                },
+            }
+        ),
+        200,
+    )
+
+
+def _lock_version_for_waive(cursor, version_id):
+    """Re-read the version + its latest payment inside the write transaction,
+    LOCKING the payment row so the hourly auto-release job can't act on the same
+    hold concurrently. Mirrors the `FOR UPDATE OF p` guard that job itself uses.
+
+    Two statements rather than one join: a submission may legitimately have no
+    payment row, and Postgres refuses `FOR UPDATE` on the nullable side of an
+    outer join. So read the version, then lock the payment separately (a no-op
+    when there isn't one)."""
+    cursor.execute(
+        "SELECT approval_status FROM event_versions WHERE id = %s",
+        (version_id,),
+    )
+    version = cursor.fetchone()
+    if not version:
+        return None
+    cursor.execute(
+        "SELECT id, status FROM payments WHERE event_version_id = %s "
+        "ORDER BY id DESC LIMIT 1 FOR UPDATE",
+        (version_id,),
+    )
+    payment = cursor.fetchone()
+    return {
+        "approval_status": version["approval_status"],
+        "payment_id": payment["id"] if payment else None,
+        "payment_status": payment["status"] if payment else None,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Expired submissions (WV-1) — versions the hourly job auto-released and marked
+# auto_rejected_expired. They drop out of /pending, so without this list they are
+# invisible and unrecoverable; the Expired section renders them so the admin can
+# publish one via /approve-waived (there is no hold left to charge). All-time,
+# newest first (owner's choice — no cutoff).
+# ---------------------------------------------------------------------------
+@blueprint.route("/expired", methods=["GET"])
+@admin_required
+def expired():
+    try:
+        with db_manager.get_cursor(commit=False) as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    ev.id                AS version_id,
+                    ev.event_id,
+                    ev.name,
+                    ev.start_datetime,
+                    ev.end_datetime,
+                    ev.city,
+                    ev.country,
+                    ev.reviewed_at,
+                    e.submitter_email,
+                    p.amount,
+                    p.currency,
+                    p.status             AS payment_status
+                FROM event_versions ev
+                JOIN events e ON e.id = ev.event_id
+                LEFT JOIN LATERAL (
+                    SELECT amount, currency, status
+                    FROM payments
+                    WHERE event_version_id = ev.id
+                    ORDER BY id DESC
+                    LIMIT 1
+                ) p ON TRUE
+                WHERE ev.approval_status = 'auto_rejected_expired'
+                  AND e.archived = FALSE
+                  AND e.published_version_id IS NULL
+                ORDER BY ev.reviewed_at DESC NULLS LAST
+                """
+            )
+            rows = [dict(r) for r in cursor.fetchall()]
+    except psycopg2.Error:
+        return jsonify({"code": 500, "error": "Database error occurred"}), 500
+    return jsonify({"code": 200, "data": rows}), 200
 
 
 # ---------------------------------------------------------------------------
@@ -952,7 +1198,12 @@ def analytics():
                     COALESCE(sum(amount) FILTER (WHERE status = 'captured'), 0) AS captured_amount,
                     count(*) FILTER (WHERE status = 'authorised')          AS held_count,
                     count(*) FILTER (WHERE status = 'auto_released')       AS auto_released_count,
-                    count(*) FILTER (WHERE status = 'cancelled')           AS cancelled_count
+                    count(*) FILTER (WHERE status = 'cancelled')           AS cancelled_count,
+                    -- WV-1: listings published without charge. `amount` keeps the
+                    -- tier price on a waived row, so this totals what was given
+                    -- away without touching the captured-revenue figure above.
+                    count(*) FILTER (WHERE status = 'waived')              AS waived_count,
+                    COALESCE(sum(amount) FILTER (WHERE status = 'waived'), 0) AS waived_amount
                 FROM payments
                 """
             )

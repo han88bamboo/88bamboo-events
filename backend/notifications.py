@@ -122,6 +122,36 @@ def send_approved(recipient, event, amount, currency, public_url=None):
     return send_email(subject, recipient, body)
 
 
+def send_approved_waived(recipient, event, public_url=None):
+    """Submitter approval email for a listing published WITHOUT charge (WV-1).
+
+    The standard approved email states as fact that the hold was captured and the
+    fee charged, which would be false here. This variant says the opposite
+    plainly: nothing was charged and any hold is released. Saying so explicitly
+    matters because a released authorisation can still show as pending on a card
+    statement for a day or two — silence invites "am I being billed?" replies.
+
+    No fee figure is quoted (there is nothing to quote) and no internal reason for
+    the waiver is disclosed."""
+    url_line = f"\nYour listing: {public_url}\n" if public_url else ""
+    subject = f"Your event is live: {event.get('name')}"
+    body = (
+        f"Hi,\n\n"
+        f"Good news — your event listing has been approved and is now live on the "
+        f"88 Bamboo events board.\n\n"
+        f"We've waived the listing fee for this one, so you have NOT been charged. "
+        f"Any temporary authorisation on your card has been released; if it still "
+        f"shows as pending on your statement it will clear on its own.\n"
+        f"{url_line}\n"
+        f"Event: {event.get('name')}\n"
+        f"When:  {event.get('start_datetime')} — {event.get('end_datetime')}\n"
+        f"Where: {event.get('city')}, {event.get('country')}\n\n"
+        f"Thank you for listing with us.\n"
+        f"— 88 Bamboo Events"
+    )
+    return send_email(subject, recipient, body)
+
+
 def send_rejected(recipient, event, reason=None):
     """Submitter rejection email (plan §8 rejected, with reason). NOT a refund —
     the authorisation is released (cancelled), so the card was never charged. The
