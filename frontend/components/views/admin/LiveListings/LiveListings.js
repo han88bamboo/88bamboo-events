@@ -190,7 +190,7 @@ function Section({ title, items, token, onUnpublish, onEdit, onMessage, busyId }
   if (items.length === 0) return null;
   return (
     <section className="mb-4">
-      <h5 className="text-muted mb-3">{title}</h5>
+      <h3 className="text-muted mb-3">{title}</h3>
       {items.map((item) => (
         <ListingRow
           key={item.event_id}
