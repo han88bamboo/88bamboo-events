@@ -64,10 +64,10 @@ import stripe
 file_name = os.path.basename(__file__)
 blueprint = Blueprint(file_name[:-3], __name__)  # blueprint name == filename
 
-# Per-IP limit: 5 submissions / 10 minutes. In-memory is correct for the single
+# Per-IP limit: 50 submissions / 10 minutes. In-memory is correct for the single
 # gevent worker (rate_limit.py explains the scaling caveat). Shared by both
 # endpoints so the whole submit->pay attempt is bounded.
-_limiter = RateLimiter(max_requests=5, window_seconds=600)
+_limiter = RateLimiter(max_requests=50, window_seconds=600)
 
 # Image size cap (env-overridable; defaults to 5 MB — submission_validation).
 _MAX_IMAGE_BYTES = int(os.getenv("MAX_IMAGE_MB", "5")) * 1024 * 1024
