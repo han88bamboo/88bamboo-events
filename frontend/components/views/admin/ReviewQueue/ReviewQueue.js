@@ -62,7 +62,7 @@ function PendingCard({ item, onApprove, onReject, onWaive, onEdit, onMessage, bu
         <div className="col-md-8">
           <div className="card-body">
             <div className="d-flex justify-content-between align-items-start">
-              <h5 className="card-title mb-1">{item.name}</h5>
+              <h3 className="card-title mb-1">{item.name}</h3>
               <div className="d-flex gap-2 flex-wrap justify-content-end">
                 {item.is_duplicate && (
                   <span className="badge bg-warning text-dark">Possible duplicate</span>
