@@ -28,12 +28,31 @@ function withValue(list, value) {
   return list;
 }
 
+// Resets an address selection to "none entered". Every field captured from a
+// Google pick is cleared together — a half-cleared selection (an address with no
+// coordinates, or coordinates with no address) is exactly what the server's
+// clean-data rule rejects. Shared by the Clear button and the emptied-box path so
+// neither can leave a stale address behind.
+const CLEARED_ADDRESS = {
+  venue_address: '',
+  latitude: '',
+  longitude: '',
+  place_id: '',
+  postcode: '',
+};
+
 function LocationFields({ values, onChange, onValidationChange, initialCountries }) {
   const [countries, setCountries] = useState(initialCountries || []);
   const [mapsReady, setMapsReady] = useState(false);
   const [mapsFailed, setMapsFailed] = useState(false);
   const [addressPending, setAddressPending] = useState(false);
   const containerRef = useRef(null);
+  // The mounted PlaceAutocompleteElement, so "Clear address" can reset its text box.
+  const autocompleteRef = useRef(null);
+  // The widget's text as of the previous input event. Lets the handler below tell
+  // "the user just emptied the box" from "the box was already empty", which the
+  // event alone cannot express.
+  const lastTextRef = useRef('');
 
   // Keep the latest values/onChange reachable from the once-mounted Google event
   // listeners (avoids stale-closure reads of venue_address/city).
@@ -106,6 +125,7 @@ function LocationFields({ values, onChange, onValidationChange, initialCountries
         element = new lib.PlaceAutocompleteElement();
         element.style.width = '100%';
         containerRef.current.appendChild(element);
+        autocompleteRef.current = element;
         setMapsReady(true);
 
         // A place chosen from the dropdown → pull everything from ONE selection.
@@ -135,6 +155,9 @@ function LocationFields({ values, onChange, onValidationChange, initialCountries
               patch.city = locality.longText || locality.shortText || '';
             }
             onChangeRef.current(patch);
+            // The box now holds the formatted address; keep the "previous text"
+            // in step so a later backspace-to-empty is seen as a real clear.
+            lastTextRef.current = patch.venue_address;
             setAddressPending(false);
           } catch {
             /* a failed field fetch just leaves the previous selection intact */
@@ -145,7 +168,23 @@ function LocationFields({ values, onChange, onValidationChange, initialCountries
         // while the box text differs from the last selected address, it's pending.
         onInput = (ev) => {
           const text = (ev.target?.value ?? '').trim();
-          setAddressPending(!!text && text !== (valuesRef.current.venue_address || ''));
+          const hadText = lastTextRef.current;
+          lastTextRef.current = text;
+
+          if (!text) {
+            setAddressPending(false);
+            // An emptied box means "no address" — drop the stored selection too,
+            // or the form would submit an address the user can no longer see.
+            // Guarded on the box HAVING had text: the edit form prefills
+            // venue_address while this widget starts blank, so a stray empty
+            // input event must not wipe a saved address nobody touched.
+            if (hadText && valuesRef.current.venue_address) {
+              onChangeRef.current({ ...CLEARED_ADDRESS });
+            }
+            return;
+          }
+
+          setAddressPending(text !== (valuesRef.current.venue_address || ''));
         };
         element.addEventListener('input', onInput);
       })
@@ -158,11 +197,31 @@ function LocationFields({ values, onChange, onValidationChange, initialCountries
       if (element) {
         if (onInput) element.removeEventListener('input', onInput);
         element.remove();
+        autocompleteRef.current = null;
       }
     };
     // Mount once; listeners read fresh values via refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Reset the address back to "none entered". This is the escape hatch from the
+  // blocking pending state (text typed but no suggestion picked): the widget's own
+  // text box has to be emptied too, or the stale text keeps re-flagging pending.
+  // It also clears the stored selection, so an emptied box can never submit a
+  // previously-picked address that is no longer on screen.
+  const clearAddress = () => {
+    const element = autocompleteRef.current;
+    if (element) {
+      // The widget's text box lives in the light DOM in current builds and the
+      // shadow DOM in others; clear whichever is present.
+      const input =
+        element.querySelector('input') || element.shadowRoot?.querySelector('input');
+      if (input) input.value = '';
+    }
+    lastTextRef.current = '';
+    setAddressPending(false);
+    onChange({ ...CLEARED_ADDRESS });
+  };
 
   return (
     <>
@@ -183,6 +242,11 @@ function LocationFields({ values, onChange, onValidationChange, initialCountries
         <label className="form-label" htmlFor="venue_address_search">
           Venue address
         </label>
+        {/* Not required by the validator, but a listing without a mapped address
+            loses its map pin — hence the nudge rather than an asterisk. */}
+        <div className="form-text text-danger mt-0 mb-1">
+          Strongly recommended to fill in, unless your location cannot be found on Google
+        </div>
         {/* The PlaceAutocompleteElement mounts into this container once Maps loads. */}
         <div ref={containerRef} />
         {!mapsReady && !mapsFailed && (
@@ -217,10 +281,25 @@ function LocationFields({ values, onChange, onValidationChange, initialCountries
           </>
         )}
         {mapsReady && (
-          <div className="form-text">
-            {values.venue_address
-              ? `Selected: ${values.venue_address}`
-              : 'Start typing and choose your address from the suggestions.'}
+          <div className="d-flex justify-content-between align-items-start gap-3">
+            <div className="form-text">
+              {values.venue_address
+                ? `Selected: ${values.venue_address}`
+                : 'Start typing and choose your address from the suggestions.'}
+            </div>
+            {/* Shown whenever there is something to clear: a half-typed address
+                (the blocking pending state) or a picked one the user wants to
+                change. Without it, a submitter stuck on "choose from the
+                suggestions" has no way out but a page reload. */}
+            {(addressPending || values.venue_address) && (
+              <button
+                type="button"
+                className="btn btn-link btn-sm p-0 text-nowrap"
+                onClick={clearAddress}
+              >
+                Clear address
+              </button>
+            )}
           </div>
         )}
       </div>
