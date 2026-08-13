@@ -19,8 +19,15 @@
 -- Apply manually (prod is a manual owner/agent step — plan.md):
 --   psql "$DATABASE_URL" -f database/migrations/wv1-waived-payments.sql
 
+-- Wrapped in a transaction: psql autocommits each statement on its own, so
+-- without this a failure after the DROP would leave payments with NO status
+-- rule at all. Either both take effect or neither does.
+BEGIN;
+
 ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_status_check;
 
 ALTER TABLE payments
     ADD CONSTRAINT payments_status_check
     CHECK (status IN ('authorised', 'captured', 'cancelled', 'auto_released', 'waived'));
+
+COMMIT;
