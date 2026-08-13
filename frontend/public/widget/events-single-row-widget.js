@@ -198,7 +198,7 @@
     wrap.appendChild(grid);
     wrap.appendChild(
       h('a', { class: 'besrw-more', href: opts.site + BASE_PATH + '/submit', target: '_top' }, [
-        'Publish an event',
+        'Have an event to promote? Publish it here!',
       ])
     );
     mount.appendChild(wrap);
