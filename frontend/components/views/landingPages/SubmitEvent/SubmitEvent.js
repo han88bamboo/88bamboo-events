@@ -26,12 +26,10 @@ import ScheduleFields, {
   toEditableOccurrences,
   toWireOccurrences,
 } from '@/components/common/ScheduleFields';
+import ImageDropZone from '@/components/common/ImageDropZone';
+import { MAX_IMAGE_MB, imageFileReason, pickImageFiles } from '@/core/utils/imageFiles';
 import CheckoutStep from './CheckoutStep';
 
-// Mirror the server's image rules for fast client-side feedback (the server is
-// still authoritative — submission_validation.py).
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-const MAX_IMAGE_MB = 5;
 // Post-go-live "additional images" feature (plan.md backlog): 0-5 extra images
 // beyond the required Feature Image, shown in the detail-page carousel.
 const MAX_ADDITIONAL_IMAGES = 5;
@@ -88,15 +86,13 @@ const EMPTY = {
 // datetime-local wants 'YYYY-MM-DDTHH:MM'; the re-submit prefill carries ISO.
 const toLocalInput = (iso) => (iso ? String(iso).slice(0, 16) : '');
 
-// Pure: message for a bad/missing image file, '' when acceptable. Mirrors the
-// server rules so obvious problems surface before a round-trip.
+// Pure: message for a bad/missing image file, '' when acceptable. The shared
+// rules (core/utils/imageFiles) mirror the server so obvious problems surface
+// before a round-trip.
 function imageError(file) {
   if (!file) return 'An event image is required.';
-  if (!ALLOWED_IMAGE_TYPES.includes(file.type))
-    return 'Image must be a JPEG, PNG, or WebP file.';
-  if (file.size > MAX_IMAGE_MB * 1024 * 1024)
-    return `Image is too large (max ${MAX_IMAGE_MB} MB).`;
-  return '';
+  const reason = imageFileReason(file);
+  return reason ? `Image ${reason}.` : '';
 }
 
 // Pure: build the per-field error map from the current form state (D2). Purely
@@ -305,6 +301,9 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
   // succeeds, then carried into the 3b create-intent payload.
   const [additionalImageFiles, setAdditionalImageFiles] = useState([]);
   const [additionalUploadError, setAdditionalUploadError] = useState('');
+  // Per-file "why this one was skipped" notices from the last pick/drop (wrong
+  // type, too big, or past the cap); cleared on the next pick/drop.
+  const [additionalNotices, setAdditionalNotices] = useState([]);
 
   // EP-7 login panel (anonymous state only): request a magic link that returns to
   // /submit?token=… signed in. Log-in-first, no in-progress persistence (owner
@@ -357,13 +356,22 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
     return () => urls.forEach((u) => URL.revokeObjectURL(u));
   }, [additionalImageFiles]);
 
+  // Accept files from either the picker or a drop; a drop bypasses the input's
+  // `accept` attribute, so the type/size rules are applied here for both paths.
   const addAdditionalImages = (files) => {
-    const picked = Array.from(files || []);
-    if (!picked.length) return;
-    setAdditionalImageFiles((prev) => [...prev, ...picked].slice(0, MAX_ADDITIONAL_IMAGES));
+    const { accepted, notices } = pickImageFiles(
+      files,
+      MAX_ADDITIONAL_IMAGES - additionalImageFiles.length,
+      MAX_ADDITIONAL_IMAGES,
+    );
+    setAdditionalNotices(notices);
+    if (!accepted.length) return;
+    setAdditionalImageFiles((prev) => [...prev, ...accepted]);
   };
   const removeAdditionalImage = (idx) => {
     setAdditionalImageFiles((prev) => prev.filter((_, i) => i !== idx));
+    // Removing one makes room again, so any "maximum reached" notice is stale.
+    setAdditionalNotices([]);
   };
 
   const resetAll = () => {
@@ -375,6 +383,7 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
     setImageFile(null);
     setAdditionalImageFiles([]);
     setAdditionalUploadError('');
+    setAdditionalNotices([]);
     setStep(0);
     setTouched({});
     setLocationTouched(false);
@@ -1054,22 +1063,27 @@ function SubmitEvent({ taxonomy, prefill, auth }) {
                 ))}
               </div>
             )}
-            {additionalImageFiles.length < MAX_ADDITIONAL_IMAGES && (
-              <input
-                type="file"
-                className="form-control"
-                accept="image/jpeg,image/png,image/webp"
-                multiple
-                onChange={(e) => {
-                  addAdditionalImages(e.target.files);
-                  e.target.value = '';
-                }}
-              />
-            )}
+            {/* Same drag-and-drop affordance as the feature image above, but
+                multi-file; dropped files run through the same rules as picked
+                ones (addAdditionalImages). */}
+            <ImageDropZone
+              multiple
+              onFiles={addAdditionalImages}
+              atCap={additionalImageFiles.length >= MAX_ADDITIONAL_IMAGES}
+              hint="Drag & drop images here, or choose files below."
+              capMessage={`Maximum of ${MAX_ADDITIONAL_IMAGES} images — remove one to add another.`}
+            />
             <div className="form-text">
               Up to {MAX_ADDITIONAL_IMAGES} more images, shown in the event&apos;s photo carousel
               (JPEG, PNG, or WebP, up to {MAX_IMAGE_MB} MB each).
             </div>
+            {additionalNotices.length > 0 && (
+              <ul className="text-danger small mt-1 mb-0 ps-3">
+                {additionalNotices.map((m) => (
+                  <li key={m}>{m}</li>
+                ))}
+              </ul>
+            )}
             {additionalUploadError && (
               <div className="text-danger small mt-1">{additionalUploadError}</div>
             )}

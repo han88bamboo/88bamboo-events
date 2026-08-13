@@ -21,7 +21,9 @@ import ScheduleFields, {
   toEditableOccurrences,
   toWireOccurrences,
 } from '@/components/common/ScheduleFields';
+import ImageDropZone from '@/components/common/ImageDropZone';
 import { additionalImagesService } from '@/core/services/additionalImages';
+import { MAX_IMAGE_MB, pickImageFiles } from '@/core/utils/imageFiles';
 
 // Post-go-live "additional images" feature (plan.md backlog): 0-5 extra images
 // beyond the untouched Feature Image field, shown in the detail-page carousel.
@@ -85,6 +87,9 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
   const [additionalImages, setAdditionalImages] = useState(src.additional_images || []);
   const [additionalUploading, setAdditionalUploading] = useState(false);
   const [additionalUploadError, setAdditionalUploadError] = useState('');
+  // Per-file "why this one was skipped" notices from the last pick/drop (wrong
+  // type, too big, or past the cap); cleared on the next pick/drop.
+  const [additionalNotices, setAdditionalNotices] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState([]); // server/network errors (top alert)
   const [locationErrors, setLocationErrors] = useState([]); // from LocationFields
@@ -121,17 +126,22 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
   const invalidClass = (name) =>
     touched[name] && fieldErrors[name] ? ' is-invalid' : '';
 
-  // Post-go-live "additional images" feature: upload immediately on pick (the
-  // edit form isn't multipart), append the ref, up to the cap.
+  // Post-go-live "additional images" feature: upload immediately on pick or drop
+  // (the edit form isn't multipart), append the ref, up to the cap. A drop
+  // bypasses the input's `accept` attribute, so the type/size rules are applied
+  // here for both paths — before spending a round-trip on a doomed upload.
   const onAddAdditionalImages = async (files) => {
-    const picked = Array.from(files || []).slice(
-      0, Math.max(0, MAX_ADDITIONAL_IMAGES - additionalImages.length),
+    const { accepted, notices } = pickImageFiles(
+      files,
+      MAX_ADDITIONAL_IMAGES - additionalImages.length,
+      MAX_ADDITIONAL_IMAGES,
     );
-    if (!picked.length) return;
+    setAdditionalNotices(notices);
+    if (!accepted.length) return;
     setAdditionalUploadError('');
     setAdditionalUploading(true);
     try {
-      const uploads = await Promise.all(picked.map((f) => additionalImagesService.upload(f)));
+      const uploads = await Promise.all(accepted.map((f) => additionalImagesService.upload(f)));
       const failed = uploads.find((u) => !u.ok);
       if (failed) {
         setAdditionalUploadError(
@@ -146,8 +156,11 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
       setAdditionalUploading(false);
     }
   };
-  const removeAdditionalImage = (idx) =>
+  const removeAdditionalImage = (idx) => {
     setAdditionalImages((prev) => prev.filter((_, i) => i !== idx));
+    // Removing one makes room again, so any "maximum reached" notice is stale.
+    setAdditionalNotices([]);
+  };
   const moveAdditionalImage = (idx, dir) =>
     setAdditionalImages((prev) => {
       const next = [...prev];
@@ -288,24 +301,27 @@ function EditEvent({ context, taxonomy, onSubmit, onCancel, submitLabel, extras,
             ))}
           </div>
         )}
-        {additionalImages.length < MAX_ADDITIONAL_IMAGES && (
-          <input
-            type="file"
-            className="form-control"
-            accept="image/jpeg,image/png,image/webp"
-            multiple
-            disabled={additionalUploading}
-            onChange={(e) => {
-              onAddAdditionalImages(e.target.files);
-              e.target.value = '';
-            }}
-          />
-        )}
+        {/* Drag-and-drop or pick; either way the files upload immediately. */}
+        <ImageDropZone
+          multiple
+          onFiles={onAddAdditionalImages}
+          disabled={additionalUploading}
+          atCap={additionalImages.length >= MAX_ADDITIONAL_IMAGES}
+          hint="Drag & drop images here, or choose files below."
+          capMessage={`Maximum of ${MAX_ADDITIONAL_IMAGES} images — remove one to add another.`}
+        />
         <div className="form-text">
-          Up to {MAX_ADDITIONAL_IMAGES} more images, shown in the event&apos;s photo carousel.
-          Use the arrows to reorder.
+          Up to {MAX_ADDITIONAL_IMAGES} more images, shown in the event&apos;s photo carousel
+          (JPEG, PNG, or WebP, up to {MAX_IMAGE_MB} MB each). Use the arrows to reorder.
         </div>
         {additionalUploading && <div className="form-text">Uploading…</div>}
+        {additionalNotices.length > 0 && (
+          <ul className="text-danger small mt-1 mb-0 ps-3">
+            {additionalNotices.map((m) => (
+              <li key={m}>{m}</li>
+            ))}
+          </ul>
+        )}
         {additionalUploadError && (
           <div className="text-danger small mt-1">{additionalUploadError}</div>
         )}
