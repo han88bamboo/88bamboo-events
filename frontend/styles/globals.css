@@ -291,6 +291,22 @@ a:focus {
   border-color: var(--bamboo-green);
   box-shadow: 0 0 0 0.2rem rgba(0, 79, 45, 0.15);
 }
+/* Google Places address autocomplete (submit/edit forms). The widget renders
+   with no border of its own, so the venue-address field reads as blank page
+   until it is clicked. Its container carries the same chrome as .form-control;
+   the focus ring is mirrored with :focus-within because the real focus lands on
+   the widget's own inner input, which this stylesheet cannot reach. Padding is
+   left to the widget, which supplies its own around the search icon. */
+.bamboo-places-field {
+  border: 1px solid var(--bamboo-border-form);
+  border-radius: var(--radius);
+  background-color: #fff;
+}
+.bamboo-places-field:focus-within {
+  border-color: var(--bamboo-green);
+  box-shadow: 0 0 0 0.2rem rgba(0, 79, 45, 0.15);
+}
+
 /* Description paragraph editor (submit page). A contentEditable box so each
    newline-separated paragraph is its own block and the gap lands BETWEEN
    paragraphs only — soft-wrapped lines within one paragraph stay tight. */

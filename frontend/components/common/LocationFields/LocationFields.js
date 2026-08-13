@@ -247,8 +247,11 @@ function LocationFields({ values, onChange, onValidationChange, initialCountries
         <div className="form-text text-danger mt-0 mb-1">
           Strongly recommended to fill in, unless your location cannot be found on Google
         </div>
-        {/* The PlaceAutocompleteElement mounts into this container once Maps loads. */}
-        <div ref={containerRef} />
+        {/* The PlaceAutocompleteElement mounts into this container once Maps loads.
+            The border is applied only once it has (see .bamboo-places-field), so
+            the loading and Maps-unavailable states below don't show an empty box
+            stacked above their own input. */}
+        <div ref={containerRef} className={mapsReady ? 'bamboo-places-field' : undefined} />
         {!mapsReady && !mapsFailed && (
           <input
             id="venue_address_search"
